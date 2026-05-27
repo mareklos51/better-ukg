@@ -1,5 +1,10 @@
-# Zrzut HTML timesheeta — zawiera dane osobowe, nie trafia do repo
+# Plik instrukcji dla Claude Code — lokalny, nie trafia do repo
+CLAUDE.md
+
+# Zrzuty HTML timesheeta — zawierają dane osobowe, nie trafiają do repo
 timesheet.html
+timesheet-overtime.html
+timesheet-*.html
 
 # Archiwum ZIP — generowane lokalnie
 *.zip

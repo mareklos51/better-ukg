@@ -224,7 +224,7 @@
       <span class="ftc-sep">│</span>
       <span class="ftc-detail ${normDone ? 'ftc-done' : 'ftc-remaining'}">
         ${normDone
-          ? `✅ Norma wykonana! (${formatBalance(-remainingMinutes)} nadwyżki)`
+          ? `✅ Norma wyrobiona! (${formatBalance(-remainingMinutes)} nadwyżki)`
           : `📋 Pozostało: <strong>${formatMinutes(remainingMinutes)}h</strong>`}
       </span>
       ${otNote}
