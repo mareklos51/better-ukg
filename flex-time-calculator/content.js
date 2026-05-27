@@ -110,24 +110,40 @@
 
     // 2b. Odejmij godziny z wpisów "Overtime Payout" — nie wliczają się do flex.
     //
-    // Wiersze wpisów (tr[data-shift-id]) mają Calc. Total w formacie dziesiętnym
-    // ("2.00", nie "2.00 hrs") oraz Activity pod innym indeksem niż wiersze m-footer:
-    //   12 TD = pierwszy wpis dnia (komórka daty obecna) → Activity=TD[9], CalcTotal=TD[5]
-    //   11 TD = kolejny wpis dnia (komórka daty spannowana z góry) → Activity=TD[8], CalcTotal=TD[4]
+    // Podejście odporne na zmienną liczbę kolumn (np. dodatkowe pola Accounting):
+    //
+    // 1. DETEKCJA ACTIVITY: szukamy input[aria-label="Activity"] w wierszu wpisu.
+    //    UKG renderuje pole Activity jako kontrolkę z input-em, którego atrybut
+    //    i właściwość .value zawiera nazwę wybranej aktywności.
+    //
+    // 2. CALC. TOTAL: w wierszach wpisów godziny są liczbami dziesiętnymi ("8.02",
+    //    nie "8.02 hrs"). RawTotal i CalcTotal to jedyne TD z czystą liczbą dziesiętną.
+    //    CalcTotal to zawsze DRUGI taki TD (RawTotal jest pierwszy).
     let overtimePayoutMinutes = 0;
     document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
-      const tds = row.querySelectorAll('td');
-      const activityIdx  = tds.length >= 12 ? 9 : 8;
-      const calcTotalIdx = tds.length >= 12 ? 5 : 4;
-      if (tds.length <= activityIdx) return;
+      // 1. Sprawdź Activity via input[aria-label="Activity"]
+      const activityInput = row.querySelector('input[aria-label="Activity"]');
+      if (!activityInput) return;
 
-      if (!tds[activityIdx].textContent.includes('Overtime Payout')) return;
+      const activityValue =
+        activityInput.value ||                       // właściwość DOM (żywa strona)
+        activityInput.getAttribute('value') || '';   // atrybut HTML (snapshot)
 
-      // Calc. Total w wierszach wpisów: liczba dziesiętna bez " hrs", np. "2.00"
-      const hoursMatch = tds[calcTotalIdx].textContent.trim().match(/^([\d.]+)$/);
-      if (hoursMatch) {
-        overtimePayoutMinutes += Math.round(parseFloat(hoursMatch[1]) * 60);
-      }
+      if (!activityValue.includes('Overtime Payout')) return;
+
+      // 2. Znajdź CalcTotal: drugi TD z czystą liczbą dziesiętną
+      const tds = [...row.querySelectorAll('td')];
+      const decimalTds = tds.filter((td) => {
+        const t = td.textContent.replace(/\s+/g, ' ').trim();
+        return /^\d+\.\d+$/.test(t);
+      });
+
+      // decimalTds[0] = RawTotal, decimalTds[1] = CalcTotal
+      const calcTd = decimalTds[1] ?? decimalTds[0];
+      if (!calcTd) return;
+
+      const hoursText = calcTd.textContent.replace(/\s+/g, '').trim();
+      overtimePayoutMinutes += Math.round(parseFloat(hoursText) * 60);
     });
 
     // 3. Minione dni robocze
