@@ -6,8 +6,6 @@ Rozszerzenie przeglądarki **Microsoft Edge / Chrome** dla systemu **UKG Pro**, 
 
 ## Problem
 
-W firmach z elastycznym czasem pracy pracownicy mogą pracować np. 9h jednego dnia i 7h następnego, byleby do końca miesiąca wyrobić normę. System UKG/SaaSHR nie pokazuje jednak, ile godzin jesteś aktualnie na plusie lub na minusie — trzeba to liczyć ręcznie.
-
 W firmie dozwolony jest elastyczny czas pracy, np. 9h jednego dnia i 7h następnego tak, aby do końca miesiąca wyrobić normę godzinową. System UKG nie pokazuje, ile godzin jesteś aktualnie na plusie lub na minusie. Trzeba to liczyć ręcznie lub na podstawie Atoss'a.
 
 ## Rozwiązanie
