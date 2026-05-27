@@ -1,0 +1,119 @@
+/* ─── Flex Time Calculator – baner ────────────────────────────────────────── */
+
+#flex-time-calc-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483647; /* max z-index */
+
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 7px 16px;
+
+  background: #1a1f2e;
+  color: #e8ecf4;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  border-bottom: 2px solid #2d3550;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  box-sizing: border-box;
+}
+
+/* Ikona */
+#flex-time-calc-banner .ftc-icon {
+  font-size: 15px;
+}
+
+/* Etykieta "Flex Time:" */
+#flex-time-calc-banner .ftc-label {
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
+}
+
+/* Saldo +/- */
+#flex-time-calc-banner .ftc-balance {
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 8px;
+  border-radius: 4px;
+}
+
+#flex-time-calc-banner .ftc-positive {
+  color: #4ade80;       /* zielony – na plusie */
+  background: rgba(74, 222, 128, 0.12);
+}
+
+#flex-time-calc-banner .ftc-negative {
+  color: #f87171;       /* czerwony – na minusie */
+  background: rgba(248, 113, 113, 0.12);
+}
+
+/* Separator pionowy */
+#flex-time-calc-banner .ftc-sep {
+  color: #3d4a68;
+  font-size: 16px;
+  user-select: none;
+}
+
+/* Szczegółowy tekst */
+#flex-time-calc-banner .ftc-detail {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+#flex-time-calc-banner .ftc-detail strong {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+#flex-time-calc-banner .ftc-detail em {
+  color: #64748b;
+  font-style: normal;
+}
+
+/* Status "Pozostało" vs "Norma wykonana" */
+#flex-time-calc-banner .ftc-remaining {
+  color: #fbbf24;  /* żółty – jeszcze nie gotowe */
+}
+
+#flex-time-calc-banner .ftc-done {
+  color: #4ade80;  /* zielony – norma wykonana */
+}
+
+/* Informacja o wykluczonych Overtime Payout */
+#flex-time-calc-banner .ftc-ot {
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: help;
+}
+
+/* Przycisk zamknięcia */
+#flex-time-calc-banner .ftc-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #4b5874;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+#flex-time-calc-banner .ftc-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+
+/* Przesuń zawartość strony w dół, żeby baner nie przykrywał nagłówka UKG */
+body:has(#flex-time-calc-banner) {
+  padding-top: 38px !important;
+}

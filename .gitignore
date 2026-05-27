@@ -1,0 +1,14 @@
+# Zrzut HTML timesheeta — zawiera dane osobowe, nie trafia do repo
+timesheet.html
+
+# Archiwum ZIP — generowane lokalnie
+*.zip
+
+# Systemy operacyjne
+.DS_Store
+Thumbs.db
+
+# Edytory
+.vscode/
+*.swp
+*~
