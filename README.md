@@ -1,14 +1,12 @@
-# ⏱ Flex Time Calculator
+# ⏱ Better UKG
 
-Rozszerzenie przeglądarki **Microsoft Edge / Chrome** dla systemu **UKG Pro**, które automatycznie oblicza saldo czasu elastycznego (flex) na podstawie timesheeta i wyświetla je jako pasek na górze strony.
+Rozszerzenie przeglądarki **Microsoft Edge / Chrome** dla systemu **UKG Pro**, które automatycznie oblicza saldo czasu elastycznego (flex) na podstawie timesheeta i wyświetla je jako pasek na górze strony. Dodatkowo przelicza salda urlopowe z godzin na dni.
 
 ---
 
-## Problem
+## Funkcjonalności
 
-W firmie dozwolony jest elastyczny czas pracy, np. 9h jednego dnia i 7h następnego tak, aby do końca miesiąca wyrobić normę godzinową. System UKG nie pokazuje, ile godzin jesteś aktualnie na plusie lub na minusie. Trzeba to liczyć ręcznie lub na podstawie Atoss'a.
-
-## Rozwiązanie
+### Kalkulator czasu flex (Timesheet)
 
 Wtyczka odczytuje dane bezpośrednio z timesheeta i oblicza:
 
@@ -16,6 +14,16 @@ Wtyczka odczytuje dane bezpośrednio z timesheeta i oblicza:
 - **Przepracowane / norma miesiąca** — łączna liczba godzin vs pełna norma miesięczna
 - **Pozostało** — ile godzin zostało do wyrobienia normy do końca miesiąca
 - **Overtime Payout** — godziny oznaczone jako *Overtime Payout* w kolumnie Activity są automatycznie **wykluczone** z salda flex
+- **Sick Leave** — możliwość uwzględnienia dni chorobowych bez wpisu w timesheecie (dodaje godziny do salda flex)
+
+### Salda urlopowe (Time Off Balances)
+
+Na stronie `Time Off → Balances` wtyczka automatycznie przelicza salda urlopowe z godzin na dni dla kart **Vacation** i **Childcare PTO**:
+
+- Duże saldo (`192.00 hours` → `24 days`)
+- Wszystkie pozycje na liście (`Current Accrued`, `Current Balance`, `Taken`, `Scheduled`, `Requested`, `Available Balance`)
+
+Działa zarówno w widoku pracownika (`My Time`) jak i w widoku menedżera (`Manage → Time`).
 
 ---
 
@@ -27,7 +35,21 @@ Wtyczka odczytuje dane bezpośrednio z timesheeta i oblicza:
 | Saldo vs dziś | Przepracowane − (minione dni robocze × 8h) |
 | Urlopy / PTO / Holiday | Wpisane w UKG jako 8h → naturalnie wliczają się do normy |
 | Overtime Payout | Wykrywane po polu `Activity` i odejmowane od sumy flex |
+| Przelicznik urlopu | Godziny ÷ 8 = dni (konfigurowalne w menu wtyczki) |
 | Odświeżanie | Automatyczne po nawigacji i zmianie danych (SPA-aware) |
+
+---
+
+## Menu wtyczki
+
+Kliknij ikonę ⏱ na pasku przeglądarki, aby otworzyć panel z:
+
+- **Saldem flex** — aktualny balans i statystyki
+- **Ustawieniami:**
+  - `Norma godzin/dzień` — domyślnie 8h, zmieniaj jeśli twoja norma jest inna
+  - `Ręczna norma miesiąca` — nadpisz automatyczne wyliczenie (np. 160h)
+  - `Sick Leave` — wpisz liczbę dni chorobowych bez wpisu w timesheecie
+  - `🏖 Urlop wyświetlaj w dniach` — toggle przełączający salda urlopowe między godzinami a dniami (domyślnie: **dni**); działa natychmiast bez klikania „Zapisz"
 
 ---
 
@@ -35,11 +57,10 @@ Wtyczka odczytuje dane bezpośrednio z timesheeta i oblicza:
 
 ### Krok 1 – Pobierz pliki
 
-**Opcja A — pobierz ZIP:**
 1. Kliknij zielony przycisk **Code** → **Download ZIP**
 2. Rozpakuj archiwum w dowolnym folderze
 
-### Krok 2 – Włącz tryb dewelopera w Edge
+### Krok 2 – Włącz tryb dewelopera
 
 1. W pasku adresu wpisz: `edge://extensions`
 2. W prawym górnym rogu włącz przełącznik **„Tryb dewelopera"**
@@ -52,9 +73,9 @@ Wtyczka odczytuje dane bezpośrednio z timesheeta i oblicza:
 
 ### Krok 4 – Użytkowanie
 
-1. Zaloguj się do UKG
-2. Przejdź do swojego timesheeta (`My Time → Timesheet`)
-3. Baner z saldem flex pojawi się automatycznie na górze strony
+1. Zaloguj się do UKG Pro
+2. Przejdź do swojego timesheeta (`My Time → Timesheet`) — baner z saldem flex pojawi się automatycznie
+3. Przejdź do `Time Off → Balances` — salda Vacation i Childcare PTO zostaną automatycznie przeliczone na dni
 
 ---
 
@@ -68,3 +89,24 @@ Identyczna procedura jak w Edge:
 
 ---
 
+## Historia wersji
+
+### v1.2.0
+- Zmiana nazwy wtyczki na **Better UKG**
+- Przeliczanie sald urlopowych z godzin na dni na stronie **Time Off Balances** (Vacation i Childcare PTO)
+- Obsługa widoku menedżerskiego (`manage/time/timeoff/balances`)
+- Toggle w menu wtyczki: **Urlop w dniach / godzinach** (działa natychmiast, bez zapisywania)
+
+### v1.1.0
+- Obsługa strony `Time Off → Request` — salda urlopowe przeliczane na dni
+- Obsługa przypadku gdy dzisiejszy dzień jest pusty w timesheecie
+
+### v1.0.0
+- Pierwsze wydanie: kalkulator salda flex z banerem na górze strony
+- Wykluczanie Overtime Payout z kalkulacji
+- Obsługa Sick Leave
+- Panel ustawień w popup
+
+---
+
+*Better UKG v1.2 by Marek Łoś · UKG Pro*

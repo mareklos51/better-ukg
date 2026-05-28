@@ -1,6 +1,6 @@
 /**
- * Flex Time Calculator – content script
- * Strona docelowa: *.saashr.com (UKG Pro / Kronos SaaS HR)
+ * Better UKG – content script
+ * Strona docelowa: *.saashr.com (UKG Pro)
  *
  * Algorytm:
  *  1. Pobierz zakres okresu z nagłówka timesheeta (span.c-timesheet-header__date-carousel-title)
@@ -15,9 +15,10 @@
 
   // ─── Konfiguracja (nadpisywana przez chrome.storage) ─────────────────────────
   let CFG = {
-    hoursPerDay: 8,    // norma godzin dziennie
-    manualNorm: 0,     // ręczna norma miesiąca (godziny); 0 = auto
-    sickLeaveDays: 0,  // dni Sick Leave bez wpisu w timesheecie
+    hoursPerDay: 8,       // norma godzin dziennie
+    manualNorm: 0,        // ręczna norma miesiąca (godziny); 0 = auto
+    sickLeaveDays: 0,     // dni Sick Leave bez wpisu w timesheecie
+    vacationInDays: true, // wyświetlaj salda urlopowe w dniach (zamiast godzin)
   };
 
   const BANNER_ID            = 'flex-time-calc-banner';
@@ -29,6 +30,11 @@
     '#time/timesheet',
     '#manage/time/timesheet',
     '#time/view/timesheets',
+  ];
+
+  const VACATION_HASH_PATTERNS = [
+    '#time/timeoff',
+    '#manage/time/timeoff',
   ];
 
   let pollTimer       = null;
@@ -313,6 +319,127 @@
     }
   }
 
+  // ─── Konwersja sald urlopowych z godzin na dni ────────────────────────────────
+
+  function isVacationPage() {
+    return VACATION_HASH_PATTERNS.some((p) => window.location.hash.includes(p));
+  }
+
+  function convertVacationBalancesToDays() {
+    if (!isVacationPage()) return false;
+    if (!CFG.vacationInDays) return revertVacationBalancesToHours();
+    let found = false;
+
+    // Request window: "208.00<span>hrs</span>" inside .c-accrual-balances__value
+    document.querySelectorAll('.c-accrual-balances__value:not([data-ftc-days])').forEach((el) => {
+      const hrsSpan = el.querySelector('span');
+      if (!hrsSpan || hrsSpan.textContent.trim() !== 'hrs') return;
+
+      const textNode = [...el.childNodes].find(
+        (n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== ''
+      );
+      if (!textNode) return;
+
+      const hrs = parseFloat(textNode.textContent.trim());
+      if (isNaN(hrs)) return;
+
+      el.setAttribute('data-ftc-orig-text', textNode.textContent.trim());
+      textNode.textContent = String(parseFloat((hrs / 8).toFixed(2)));
+      hrsSpan.textContent = 'days';
+      el.setAttribute('data-ftc-days', '1');
+      found = true;
+    });
+
+    // Balances page: Vacation & Childcare PTO cards
+    const TARGET_TITLES = ['Vacation', 'Childcare PTO'];
+    document.querySelectorAll('.c-card:not([data-ftc-days])').forEach((card) => {
+      const titleEl = card.querySelector('.c-card__title-primary');
+      if (!titleEl || !TARGET_TITLES.includes(titleEl.textContent.trim())) return;
+
+      // Featured value: 192.00<small class="c-balance-type-text-custom-size">hours</small>
+      const valueEl = card.querySelector('.c-featured-content .value');
+      if (valueEl && !valueEl.getAttribute('data-ftc-days')) {
+        const smallEl = valueEl.querySelector('small.c-balance-type-text-custom-size');
+        if (smallEl && smallEl.textContent.trim() === 'hours') {
+          const textNode = [...valueEl.childNodes].find(
+            (n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== ''
+          );
+          if (textNode) {
+            const hrs = parseFloat(textNode.textContent.trim());
+            if (!isNaN(hrs)) {
+              valueEl.setAttribute('data-ftc-orig-text', textNode.textContent.trim());
+              textNode.textContent = String(parseFloat((hrs / 8).toFixed(2)));
+              smallEl.textContent = 'days';
+              valueEl.setAttribute('data-ftc-days', '1');
+            }
+          }
+        }
+      }
+
+      // Detail list items: <b>208.00 hrs</b>
+      card.querySelectorAll('.text-list-item--line .data b').forEach((b) => {
+        if (b.getAttribute('data-ftc-days')) return;
+        const m = b.textContent.trim().match(/^([\d.]+)\s*hrs$/i);
+        if (!m) return;
+        const hrs = parseFloat(m[1]);
+        if (isNaN(hrs)) return;
+        b.setAttribute('data-ftc-orig', b.textContent.trim());
+        b.textContent = `${parseFloat((hrs / 8).toFixed(2))} days`;
+        b.setAttribute('data-ftc-days', '1');
+      });
+
+      card.setAttribute('data-ftc-days', '1');
+      found = true;
+    });
+
+    return found;
+  }
+
+  function revertVacationBalancesToHours() {
+    // Request window
+    document.querySelectorAll('.c-accrual-balances__value[data-ftc-days]').forEach((el) => {
+      const orig = el.getAttribute('data-ftc-orig-text');
+      if (!orig) return;
+      const hrsSpan = el.querySelector('span');
+      const textNode = [...el.childNodes].find(
+        (n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== ''
+      );
+      if (textNode) textNode.textContent = orig;
+      if (hrsSpan) hrsSpan.textContent = 'hrs';
+      el.removeAttribute('data-ftc-days');
+      el.removeAttribute('data-ftc-orig-text');
+    });
+
+    // Balance cards — featured value
+    document.querySelectorAll('.c-featured-content .value[data-ftc-days]').forEach((el) => {
+      const orig = el.getAttribute('data-ftc-orig-text');
+      if (!orig) return;
+      const smallEl = el.querySelector('small.c-balance-type-text-custom-size');
+      const textNode = [...el.childNodes].find(
+        (n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== ''
+      );
+      if (textNode) textNode.textContent = orig;
+      if (smallEl) smallEl.textContent = 'hours';
+      el.removeAttribute('data-ftc-days');
+      el.removeAttribute('data-ftc-orig-text');
+    });
+
+    // Balance cards — detail list items
+    document.querySelectorAll('.text-list-item--line .data b[data-ftc-days]').forEach((b) => {
+      const orig = b.getAttribute('data-ftc-orig');
+      if (orig) b.textContent = orig;
+      b.removeAttribute('data-ftc-days');
+      b.removeAttribute('data-ftc-orig');
+    });
+
+    // Usuń markery z kart żeby pozwolić na ponowną konwersję przy przełączeniu
+    document.querySelectorAll('.c-card[data-ftc-days]').forEach((card) => {
+      card.removeAttribute('data-ftc-days');
+    });
+
+    return true;
+  }
+
   // ─── Detekcja strony i odświeżanie ───────────────────────────────────────────
 
   function isTimesheetPage() {
@@ -331,7 +458,10 @@
     let attempts = 0;
     pollTimer = setInterval(() => {
       attempts++;
-      if (tryCalculateAndShow() || attempts >= POLL_MAX_ATTEMPTS) {
+      const done = isVacationPage()
+        ? convertVacationBalancesToDays()
+        : tryCalculateAndShow();
+      if (done || attempts >= POLL_MAX_ATTEMPTS) {
         clearInterval(pollTimer);
       }
     }, POLL_INTERVAL_MS);
@@ -346,12 +476,17 @@
           node.nodeType === Node.ELEMENT_NODE &&
           (node.matches?.('tr[data-group-date]') ||
            node.querySelector?.('tr[data-group-date]') ||
-           node.querySelector?.('.c-timesheet-header__date-carousel-title'))
+           node.querySelector?.('.c-timesheet-header__date-carousel-title') ||
+           node.matches?.('.c-accrual-balances__value') ||
+           node.querySelector?.('.c-accrual-balances__value'))
         )
       );
       if (relevant) {
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(tryCalculateAndShow, 400);
+        debounceTimer = setTimeout(() => {
+          if (isVacationPage()) convertVacationBalancesToDays();
+          else tryCalculateAndShow();
+        }, 400);
       }
     });
     mutationObs.observe(document.body, { childList: true, subtree: true });
@@ -369,6 +504,8 @@
       if (msg.hoursPerDay) CFG.hoursPerDay = msg.hoursPerDay;
       if (msg.manualNorm !== undefined) CFG.manualNorm = msg.manualNorm;
       if (msg.sickLeaveDays !== undefined) CFG.sickLeaveDays = msg.sickLeaveDays;
+      if (msg.vacationInDays !== undefined) CFG.vacationInDays = msg.vacationInDays;
+      if (isVacationPage()) convertVacationBalancesToDays();
       tryCalculateAndShow();
     }
 
@@ -380,20 +517,21 @@
   async function init() {
     // Wczytaj ustawienia z chrome.storage
     try {
-      const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'sickLeaveDays']);
+      const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'sickLeaveDays', 'vacationInDays']);
       if (stored.hoursPerDay) CFG.hoursPerDay = stored.hoursPerDay;
       if (stored.manualNorm  !== undefined) CFG.manualNorm  = stored.manualNorm;
       if (stored.sickLeaveDays !== undefined) CFG.sickLeaveDays = stored.sickLeaveDays;
+      if (stored.vacationInDays !== undefined) CFG.vacationInDays = stored.vacationInDays;
     } catch (_) {}
 
-    if (isTimesheetPage()) startPolling();
+    if (isTimesheetPage() || isVacationPage()) startPolling();
     setupMutationObserver();
   }
 
   window.addEventListener('hashchange', () => {
     document.getElementById(BANNER_ID)?.remove();
     clearInterval(pollTimer);
-    if (isTimesheetPage()) startPolling();
+    if (isTimesheetPage() || isVacationPage()) startPolling();
   });
 
   if (document.readyState === 'loading') {

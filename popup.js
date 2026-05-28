@@ -1,5 +1,5 @@
 /**
- * Flex Time Calculator – popup script
+ * Better UKG – popup script
  *
  * Komunikuje się z content.js poprzez chrome.tabs.sendMessage,
  * a ustawienia przechowuje w chrome.storage.local.
@@ -27,14 +27,16 @@ function hide(id) { document.getElementById(id).style.display = 'none'; }
 
 async function init() {
   // Wczytaj ustawienia
-  const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'sickLeaveDays']);
-  const hoursPerDay   = stored.hoursPerDay   ?? HOURS_PER_DAY_DEFAULT;
-  const manualNorm    = stored.manualNorm    ?? 0;
-  const sickLeaveDays = stored.sickLeaveDays ?? 0;
+  const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'sickLeaveDays', 'vacationInDays']);
+  const hoursPerDay     = stored.hoursPerDay   ?? HOURS_PER_DAY_DEFAULT;
+  const manualNorm      = stored.manualNorm    ?? 0;
+  const sickLeaveDays   = stored.sickLeaveDays ?? 0;
+  const vacationInDays  = stored.vacationInDays ?? true;
 
-  document.getElementById('hours-per-day').value   = hoursPerDay;
-  document.getElementById('manual-norm').value     = manualNorm;
-  document.getElementById('sick-leave-days').value = sickLeaveDays;
+  document.getElementById('hours-per-day').value    = hoursPerDay;
+  document.getElementById('manual-norm').value      = manualNorm;
+  document.getElementById('sick-leave-days').value  = sickLeaveDays;
+  document.getElementById('vacation-in-days').checked = vacationInDays;
 
   // Pobierz dane z aktywnej karty (content.js)
   let tab;
@@ -47,7 +49,7 @@ async function init() {
     return;
   }
 
-  // Sprawdź czy strona to SaaSHR
+  // Sprawdź czy strona to UKG Pro
   if (!tab.url?.includes('saashr.com')) {
     showError('Otwórz timesheet na stronie *.saashr.com, aby zobaczyć dane.');
     return;
@@ -58,7 +60,7 @@ async function init() {
     data = await chrome.tabs.sendMessage(tab.id, { action: 'getFlexData' });
   } catch (e) {
     // Content script jeszcze nie odpowiada — może strona jest na innej podstronie
-    showError('Nie znaleziono danych timesheeta.\nOtwórz zakładkę „Timesheet" w UKG/SaaSHR i spróbuj ponownie.');
+    showError('Nie znaleziono danych timesheeta.\nOtwórz zakładkę „Timesheet" w UKG Pro i spróbuj ponownie.');
     return;
   }
 
@@ -136,12 +138,25 @@ function renderData(data, hoursPerDay, manualNorm, sickLeaveDays) {
 
 // ─── Zapis ustawień ───────────────────────────────────────────────────────────
 
-document.getElementById('save-btn').addEventListener('click', async () => {
-  const hoursPerDay   = parseFloat(document.getElementById('hours-per-day').value)   || HOURS_PER_DAY_DEFAULT;
-  const manualNorm    = parseFloat(document.getElementById('manual-norm').value)    || 0;
-  const sickLeaveDays = parseInt(document.getElementById('sick-leave-days').value)  || 0;
+// Toggle urlopu — działa natychmiast bez klikania "Zapisz"
+document.getElementById('vacation-in-days').addEventListener('change', async (e) => {
+  const vacationInDays = e.target.checked;
+  await chrome.storage.local.set({ vacationInDays });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, { action: 'settingsUpdated', vacationInDays });
+    } catch (_) {}
+  }
+});
 
-  await chrome.storage.local.set({ hoursPerDay, manualNorm, sickLeaveDays });
+document.getElementById('save-btn').addEventListener('click', async () => {
+  const hoursPerDay    = parseFloat(document.getElementById('hours-per-day').value)  || HOURS_PER_DAY_DEFAULT;
+  const manualNorm     = parseFloat(document.getElementById('manual-norm').value)     || 0;
+  const sickLeaveDays  = parseInt(document.getElementById('sick-leave-days').value)   || 0;
+  const vacationInDays = document.getElementById('vacation-in-days').checked;
+
+  await chrome.storage.local.set({ hoursPerDay, manualNorm, sickLeaveDays, vacationInDays });
 
   // Poinformuj content.js o nowych ustawieniach i odśwież widok
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -152,6 +167,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
         hoursPerDay,
         manualNorm,
         sickLeaveDays,
+        vacationInDays,
       });
     } catch (_) {}
   }
