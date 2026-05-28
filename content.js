@@ -17,6 +17,7 @@
   let CFG = {
     hoursPerDay: 8,    // norma godzin dziennie
     manualNorm: 0,     // ręczna norma miesiąca (godziny); 0 = auto
+    sickLeaveDays: 0,  // dni Sick Leave bez wpisu w timesheecie
   };
 
   const BANNER_ID            = 'flex-time-calc-banner';
@@ -87,6 +88,47 @@
 
   // ─── Główna kalkulacja ────────────────────────────────────────────────────────
 
+  /**
+   * Parsuje format daty z atrybutu data-group-date UKG: "THU May 28" → { month: 4, day: 28 }
+   * new Date() nie radzi sobie z tym formatem (brak roku, niestandardowy zapis).
+   */
+  const MONTH_ABBR = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5,
+                       Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+
+  function parseDateAttr(attr) {
+    const m = (attr || '').trim().match(/^[A-Z]{3}\s+([A-Za-z]{3})\s+(\d{1,2})$/);
+    if (!m) return null;
+    const month = MONTH_ABBR[m[1]];
+    const day   = parseInt(m[2], 10);
+    if (month === undefined || isNaN(day)) return null;
+    return { month, day };
+  }
+
+  /**
+   * Zwraca true jeśli m-footer dla dzisiejszej daty istnieje, ale ma 0 godzin.
+   * Używane żeby nie naliczać normy za dzień, który jeszcze nie jest wpisany.
+   */
+  function isTodayEmpty(today) {
+    const todayMonth = today.getMonth();
+    const todayDay   = today.getDate();
+    let foundRow = false;
+    let hasHours = false;
+
+    document.querySelectorAll('tr[data-group-date].m-footer').forEach((row) => {
+      const parsed = parseDateAttr(row.getAttribute('data-group-date'));
+      if (!parsed) return;
+      if (parsed.month !== todayMonth || parsed.day !== todayDay) return;
+
+      foundRow = true;
+      const tds = row.querySelectorAll('td');
+      if (tds.length > CALC_TOTAL_TD_INDEX) {
+        if (parseHoursToMinutes(tds[CALC_TOTAL_TD_INDEX].textContent) > 0) hasHours = true;
+      }
+    });
+
+    return foundRow && !hasHours;
+  }
+
   function calculate() {
     // 1. Nagłówek okresu
     const titleEl = document.querySelector('span.c-timesheet-header__date-carousel-title');
@@ -151,7 +193,15 @@
     today.setHours(0, 0, 0, 0);
     const effectiveToday = today < period.end ? today : period.end;
 
-    const elapsedWorkingDays   = countWorkingDays(period.start, effectiveToday);
+    // Jeśli dziś jest dzień roboczy bez wpisanych godzin, nie naliczaj normy za dziś
+    let normEndDate = effectiveToday;
+    const todayIsWeekday = effectiveToday.getDay() !== 0 && effectiveToday.getDay() !== 6;
+    if (todayIsWeekday && effectiveToday.getTime() === today.getTime() && isTodayEmpty(today)) {
+      normEndDate = new Date(today);
+      normEndDate.setDate(normEndDate.getDate() - 1);
+    }
+
+    const elapsedWorkingDays   = countWorkingDays(period.start, normEndDate);
     const fullMonthWorkingDays = countWorkingDays(period.start, period.end);
 
     // 4. Normy
@@ -163,8 +213,9 @@
 
     totalWorkedMinutes -= overtimePayoutMinutes;
 
-    const balanceMinutes   = totalWorkedMinutes - normElapsedMinutes;
-    const remainingMinutes = normFullMonthMinutes - totalWorkedMinutes;
+    const sickLeaveAdjustMinutes = CFG.sickLeaveDays * CFG.hoursPerDay * 60;
+    const balanceMinutes   = totalWorkedMinutes - normElapsedMinutes + sickLeaveAdjustMinutes;
+    const remainingMinutes = normFullMonthMinutes - totalWorkedMinutes - sickLeaveAdjustMinutes;
 
     return {
       balanceMinutes,
@@ -174,7 +225,8 @@
       elapsedWorkingDays,
       fullMonthWorkingDays,
       remainingMinutes,
-      overtimePayoutMinutes,   // godziny wykluczone z flex (informacyjnie)
+      overtimePayoutMinutes,
+      sickLeaveAdjustMinutes,
       periodText: titleEl.textContent.trim(),
     };
   }
@@ -192,6 +244,7 @@
       fullMonthWorkingDays,
       remainingMinutes,
       overtimePayoutMinutes,
+      sickLeaveAdjustMinutes,
     } = data;
 
     const isPositive = balanceMinutes >= 0;
@@ -200,9 +253,21 @@
     const otNote = overtimePayoutMinutes > 0
       ? `<span class="ftc-sep">│</span>
          <span class="ftc-ot" title="Godziny Overtime Payout wykluczone z kalkulacji flex">
-           🔒 OT: −${formatMinutes(overtimePayoutMinutes)}h
+           🔒 OT: ${formatMinutes(overtimePayoutMinutes)}h
          </span>`
       : '';
+
+    const slAdjLabel = sickLeaveAdjustMinutes > 0
+      ? ` <span class="ftc-sl-adj">(+${formatMinutes(sickLeaveAdjustMinutes)}h)</span>`
+      : '';
+    const slNote = `
+      <span class="ftc-sep">│</span>
+      <span class="ftc-sl">
+        🏥 <span class="ftc-sl-label">Sick Leave:</span>
+        <input type="number" class="ftc-sl-input" min="0" max="31" value="${CFG.sickLeaveDays}"
+               title="Dni Sick Leave w tym miesiącu bez wpisu w timesheecie — dodaje ${CFG.hoursPerDay}h za każdy dzień do salda flex">
+        <span class="ftc-sl-unit">dni</span>${slAdjLabel}
+      </span>`;
 
     const banner = document.createElement('div');
     banner.id = BANNER_ID;
@@ -228,12 +293,24 @@
           : `📋 Pozostało: <strong>${formatMinutes(remainingMinutes)}h</strong>`}
       </span>
       ${otNote}
+      ${slNote}
       <button class="ftc-close" title="Ukryj baner">✕</button>
     `;
 
     document.body.prepend(banner);
 
     banner.querySelector('.ftc-close').addEventListener('click', () => banner.remove());
+
+    const slInput = banner.querySelector('.ftc-sl-input');
+    if (slInput) {
+      slInput.addEventListener('change', () => {
+        const days = Math.max(0, parseInt(slInput.value) || 0);
+        slInput.value = days;
+        CFG.sickLeaveDays = days;
+        chrome.storage.local.set({ sickLeaveDays: days });
+        tryCalculateAndShow();
+      });
+    }
   }
 
   // ─── Detekcja strony i odświeżanie ───────────────────────────────────────────
@@ -291,6 +368,7 @@
     if (msg.action === 'settingsUpdated') {
       if (msg.hoursPerDay) CFG.hoursPerDay = msg.hoursPerDay;
       if (msg.manualNorm !== undefined) CFG.manualNorm = msg.manualNorm;
+      if (msg.sickLeaveDays !== undefined) CFG.sickLeaveDays = msg.sickLeaveDays;
       tryCalculateAndShow();
     }
 
@@ -302,9 +380,10 @@
   async function init() {
     // Wczytaj ustawienia z chrome.storage
     try {
-      const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm']);
+      const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'sickLeaveDays']);
       if (stored.hoursPerDay) CFG.hoursPerDay = stored.hoursPerDay;
       if (stored.manualNorm  !== undefined) CFG.manualNorm  = stored.manualNorm;
+      if (stored.sickLeaveDays !== undefined) CFG.sickLeaveDays = stored.sickLeaveDays;
     } catch (_) {}
 
     if (isTimesheetPage()) startPolling();

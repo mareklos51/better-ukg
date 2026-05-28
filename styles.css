@@ -89,9 +89,56 @@
 
 /* Informacja o wykluczonych Overtime Payout */
 #flex-time-calc-banner .ftc-ot {
-  color: #94a3b8;
+  color: #ffffff;
   font-size: 12px;
+  font-weight: 500;
   cursor: help;
+}
+
+/* Sick Leave – pole w banerze */
+#flex-time-calc-banner .ftc-sl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+#flex-time-calc-banner .ftc-sl-label {
+  white-space: nowrap;
+}
+
+#flex-time-calc-banner .ftc-sl-unit {
+  white-space: nowrap;
+}
+
+#flex-time-calc-banner .ftc-sl-input {
+  width: 46px;
+  padding: 2px 4px;
+  background: #0f1420;
+  border: 1px solid #3d4a68;
+  border-radius: 3px;
+  color: #e2e8f0;
+  font-size: 12px;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+#flex-time-calc-banner .ftc-sl-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+#flex-time-calc-banner .ftc-sl-input::-webkit-outer-spin-button,
+#flex-time-calc-banner .ftc-sl-input::-webkit-inner-spin-button {
+  -webkit-appearance: auto;
+}
+
+#flex-time-calc-banner .ftc-sl-adj {
+  color: #4ade80;
+  font-weight: 600;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* Przycisk zamknięcia */
