@@ -16,14 +16,30 @@ Wtyczka odczytuje dane bezpośrednio z timesheeta i oblicza:
 - **Overtime Payout** — godziny oznaczone jako *Overtime Payout* w kolumnie Activity są automatycznie **wykluczone** z salda flex
 - **Sick Leave** — możliwość uwzględnienia dni chorobowych bez wpisu w timesheecie (dodaje godziny do salda flex)
 
-### Salda urlopowe (Time Off Balances)
+![Baner flex time na górze timesheeta](assets/flex-time-bar-timesheet.png)
 
-Na stronie `Time Off → Request` wtyczka automatycznie przelicza saldo urlopowe z godzin na dni dla sumy urlopów. 
+Sumy godzin w wierszach podsumowujących dzień są wyświetlane w formacie **HH:MM** zamiast domyślnego `X.XX hrs`:
+
+![Sumy godzin w formacie HH:MM](assets/time-in-hhmm-timesheet.png)
+
+### Menu wtyczki
+
+Kliknij ikonę ⏱ na pasku przeglądarki, aby otworzyć panel z saldem flex i ustawieniami:
+
+![Panel ustawień wtyczki](assets/addon-menu.png)
+
+### Salda urlopowe (Time Off Balances)
 
 Na stronie `Time Off → Balances` wtyczka automatycznie przelicza salda urlopowe z godzin na dni dla kart **Vacation** i **Childcare PTO**:
 
 - Duże saldo (`192.00 hours` → `24 days`)
 - Wszystkie pozycje na liście (`Current Accrued`, `Current Balance`, `Taken`, `Scheduled`, `Requested`, `Available Balance`)
+
+![Salda urlopowe w dniach – widok Balances](assets/vacation-balance-mgr-view-days.png)
+
+Na stronie `Time Off → Request` wtyczka automatycznie przelicza saldo urlopowe z godzin na dni:
+
+![Salda urlopowe w dniach – widok Request](assets/vacation-balance-request-days.png)
 
 Działa zarówno w widoku pracownika (`My Time`) jak i w widoku menedżera (`Manage → Time`).
 
@@ -40,19 +56,6 @@ Działa zarówno w widoku pracownika (`My Time`) jak i w widoku menedżera (`Man
 | Przelicznik urlopu | Godziny ÷ 8 = dni (konfigurowalne w menu wtyczki) |
 | Odświeżanie | Automatyczne po nawigacji i zmianie danych (odśwież stronę) |
 | Sick Leave | Przy nie wpisanym sick leave, możesz wprowadzić korektę o ilość dni |
-
----
-
-## Menu wtyczki
-
-Kliknij ikonę ⏱ na pasku przeglądarki, aby otworzyć panel z:
-
-- **Saldem flex** — aktualny balans i statystyki
-- **Ustawieniami:**
-  - `Norma godzin/dzień` — domyślnie 8h, zmieniaj jeśli twoja norma jest inna
-  - `Ręczna norma miesiąca` — nadpisz automatyczne wyliczenie (np. 160h)
-  - `Sick Leave` — wpisz liczbę dni chorobowych bez wpisu w timesheecie
-  - `🏖 Urlop wyświetlaj w dniach` — toggle przełączający salda urlopowe między godzinami a dniami (domyślnie: **dni**); działa natychmiast bez klikania „Zapisz"
 
 ---
 
