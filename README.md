@@ -59,41 +59,45 @@ Działa zarówno w widoku pracownika (`My Time`) jak i w widoku menedżera (`Man
 
 ---
 
-## Instalacja w Microsoft Edge
+## Instalacja w Microsoft Edge / Chrome
 
 ### Krok 1 – Pobierz pliki
 
-1. Kliknij zielony przycisk **Code** → **Download ZIP**
-2. Rozpakuj archiwum w dowolnym folderze (np. na pulpicie w folderze Better UKG)
+1. Kliknij zielony przycisk **Code** → **Download ZIP** na górze strony.
 
-### Krok 2 – Włącz tryb dewelopera
+![Pobierz ZIP z GitHub](assets/1-download-zip.png)
 
-1. W pasku adresu wpisz: `edge://extensions`
-2. W lewej kolumnie włącz przełącznik **„Tryb dewelopera"**
+2. Rozpakuj archiwum w dowolnym folderze (np. na pulpicie)
 
-Uwaga: Edge będzie przypominał o tym, że tryb dewelopera jest włączony. Możliwe jest jedynie przesuwanie tego przypomnienia co 2 tygodnie.
+![Rozpakuj archiwum](assets/2-unpack-addon.png)
 
-### Krok 3 – Załaduj rozszerzenie
+### Krok 2 – Włącz tryb dewelopera i załaduj rozszerzenie
 
-1. Kliknij przycisk **„Załaduj rozpakowane"** / **„Load unpacked"**
-2. Wskaż folder z plikami rozszerzenia (ten, w którym jest plik `manifest.json`)
-3. Rozszerzenie pojawi się na liście z ikoną ⏱
+1. W pasku adresu wpisz `edge://extensions` (lub `chrome://extensions`)
+2. Włącz przełącznik **„Tryb dewelopera"** / **„Developer mode"**
+3. Kliknij **„Załaduj rozpakowane"** / **„Load unpacked"**
 
-### Krok 4 – Użytkowanie
+![Tryb dewelopera i załaduj rozpakowane](assets/3-open-developer-mode-and-load-unpacked.png)
 
-1. Zaloguj się do UKG Pro
-2. Przejdź do swojego timesheeta (`My Time → Timesheet`) — baner z saldem flex pojawi się automatycznie
-3. Przejdź do `Time Off → Request` — salda Vacation zostaną automatycznie przeliczone na dni
+### Krok 3 – Wskaż folder z rozszerzeniem
 
----
+Wskaż folder, który właśnie rozpakowałeś (ten, w którym jest plik `manifest.json` — zazwyczaj `better-ukg-main`).
 
-## Instalacja w Google Chrome
+![Wybierz folder better-ukg-main](assets/4-select-folder-better-ukg-main.png)
 
-Identyczna procedura jak w Edge:
+### Krok 4 – Gotowe!
 
-1. W pasku adresu wpisz: `chrome://extensions`
-2. Włącz **„Tryb dewelopera"** (prawy górny róg)
-3. Kliknij **„Załaduj rozpakowane"** i wskaż folder z `manifest.json`
+Przejdź do timesheeta w UKG Pro — baner z saldem flex pojawi się automatycznie na górze strony.
+
+![Baner flex pojawia się na górze timesheeta](assets/5-flex-bar-should-be-visible.png)
+
+> **Uwaga (Edge):** Edge będzie przypominał o włączonym trybie dewelopera. Możesz to przypomnienie odsuwać co 2 tygodnie.
+
+### Opcjonalnie – Przypnij ikonę do paska
+
+Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mieć szybki dostęp do panelu ustawień.
+
+![Przypnij rozszerzenie do paska](assets/6-optional-pin-the-addon.png)
 
 ---
 
