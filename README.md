@@ -18,6 +18,8 @@ Wtyczka odczytuje dane bezpośrednio z timesheeta i oblicza:
 
 ### Salda urlopowe (Time Off Balances)
 
+Na stronie `Time Off → Request` wtyczka automatycznie przelicza saldo urlopowe z godzin na dni dla sumy urlopów. 
+
 Na stronie `Time Off → Balances` wtyczka automatycznie przelicza salda urlopowe z godzin na dni dla kart **Vacation** i **Childcare PTO**:
 
 - Duże saldo (`192.00 hours` → `24 days`)
@@ -36,7 +38,8 @@ Działa zarówno w widoku pracownika (`My Time`) jak i w widoku menedżera (`Man
 | Urlopy / PTO / Holiday | Wpisane w UKG jako 8h → naturalnie wliczają się do normy |
 | Overtime Payout | Wykrywane po polu `Activity` i odejmowane od sumy flex |
 | Przelicznik urlopu | Godziny ÷ 8 = dni (konfigurowalne w menu wtyczki) |
-| Odświeżanie | Automatyczne po nawigacji i zmianie danych (SPA-aware) |
+| Odświeżanie | Automatyczne po nawigacji i zmianie danych (odśwież stronę) |
+| Sick Leave | Przy nie wpisanym sick leave, możesz wprowadzić korektę o ilość dni |
 
 ---
 
@@ -58,16 +61,18 @@ Kliknij ikonę ⏱ na pasku przeglądarki, aby otworzyć panel z:
 ### Krok 1 – Pobierz pliki
 
 1. Kliknij zielony przycisk **Code** → **Download ZIP**
-2. Rozpakuj archiwum w dowolnym folderze
+2. Rozpakuj archiwum w dowolnym folderze (np. na pulpicie w folderze Better UKG)
 
 ### Krok 2 – Włącz tryb dewelopera
 
 1. W pasku adresu wpisz: `edge://extensions`
-2. W prawym górnym rogu włącz przełącznik **„Tryb dewelopera"**
+2. W lewej kolumnie włącz przełącznik **„Tryb dewelopera"**
+
+Uwaga: Edge będzie przypominał o tym, że tryb dewelopera jest włączony. Możliwe jest jedynie przesuwanie tego przypomnienia co 2 tygodnie.
 
 ### Krok 3 – Załaduj rozszerzenie
 
-1. Kliknij przycisk **„Załaduj rozpakowane"**
+1. Kliknij przycisk **„Załaduj rozpakowane"** / **„Load unpacked"**
 2. Wskaż folder z plikami rozszerzenia (ten, w którym jest plik `manifest.json`)
 3. Rozszerzenie pojawi się na liście z ikoną ⏱
 
@@ -75,7 +80,7 @@ Kliknij ikonę ⏱ na pasku przeglądarki, aby otworzyć panel z:
 
 1. Zaloguj się do UKG Pro
 2. Przejdź do swojego timesheeta (`My Time → Timesheet`) — baner z saldem flex pojawi się automatycznie
-3. Przejdź do `Time Off → Balances` — salda Vacation i Childcare PTO zostaną automatycznie przeliczone na dni
+3. Przejdź do `Time Off → Request` — salda Vacation zostaną automatycznie przeliczone na dni
 
 ---
 

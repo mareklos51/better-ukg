@@ -27,16 +27,18 @@ function hide(id) { document.getElementById(id).style.display = 'none'; }
 
 async function init() {
   // Wczytaj ustawienia
-  const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'sickLeaveDays', 'vacationInDays']);
+  const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'sickLeaveDays', 'vacationInDays', 'hhmmFormat']);
   const hoursPerDay     = stored.hoursPerDay   ?? HOURS_PER_DAY_DEFAULT;
   const manualNorm      = stored.manualNorm    ?? 0;
   const sickLeaveDays   = stored.sickLeaveDays ?? 0;
   const vacationInDays  = stored.vacationInDays ?? true;
+  const hhmmFormat      = stored.hhmmFormat    ?? true;
 
   document.getElementById('hours-per-day').value    = hoursPerDay;
   document.getElementById('manual-norm').value      = manualNorm;
   document.getElementById('sick-leave-days').value  = sickLeaveDays;
   document.getElementById('vacation-in-days').checked = vacationInDays;
+  document.getElementById('hhmm-format').checked    = hhmmFormat;
 
   // Pobierz dane z aktywnej karty (content.js)
   let tab;
@@ -138,7 +140,7 @@ function renderData(data, hoursPerDay, manualNorm, sickLeaveDays) {
 
 // ─── Zapis ustawień ───────────────────────────────────────────────────────────
 
-// Toggle urlopu — działa natychmiast bez klikania "Zapisz"
+// Toggles działające natychmiast bez klikania "Zapisz"
 document.getElementById('vacation-in-days').addEventListener('change', async (e) => {
   const vacationInDays = e.target.checked;
   await chrome.storage.local.set({ vacationInDays });
@@ -150,13 +152,25 @@ document.getElementById('vacation-in-days').addEventListener('change', async (e)
   }
 });
 
+document.getElementById('hhmm-format').addEventListener('change', async (e) => {
+  const hhmmFormat = e.target.checked;
+  await chrome.storage.local.set({ hhmmFormat });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, { action: 'settingsUpdated', hhmmFormat });
+    } catch (_) {}
+  }
+});
+
 document.getElementById('save-btn').addEventListener('click', async () => {
   const hoursPerDay    = parseFloat(document.getElementById('hours-per-day').value)  || HOURS_PER_DAY_DEFAULT;
   const manualNorm     = parseFloat(document.getElementById('manual-norm').value)     || 0;
   const sickLeaveDays  = parseInt(document.getElementById('sick-leave-days').value)   || 0;
   const vacationInDays = document.getElementById('vacation-in-days').checked;
+  const hhmmFormat     = document.getElementById('hhmm-format').checked;
 
-  await chrome.storage.local.set({ hoursPerDay, manualNorm, sickLeaveDays, vacationInDays });
+  await chrome.storage.local.set({ hoursPerDay, manualNorm, sickLeaveDays, vacationInDays, hhmmFormat });
 
   // Poinformuj content.js o nowych ustawieniach i odśwież widok
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -168,6 +182,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
         manualNorm,
         sickLeaveDays,
         vacationInDays,
+        hhmmFormat,
       });
     } catch (_) {}
   }

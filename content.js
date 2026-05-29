@@ -19,6 +19,7 @@
     manualNorm: 0,        // ręczna norma miesiąca (godziny); 0 = auto
     sickLeaveDays: 0,     // dni Sick Leave bez wpisu w timesheecie
     vacationInDays: true, // wyświetlaj salda urlopowe w dniach (zamiast godzin)
+    hhmmFormat: true,     // wyświetlaj sumy godzin w formacie HH:MM zamiast X.XX hrs
   };
 
   const BANNER_ID            = 'flex-time-calc-banner';
@@ -63,6 +64,14 @@
   }
 
   function fmt2(n) { return String(n).padStart(2, '0'); }
+
+  /**
+   * Zwraca oryginalny tekst komórki: jeśli została przekonwertowana do HH:MM,
+   * atrybut data-ftc-hhmm przechowuje oryginalną wartość "X.XX hrs".
+   */
+  function getOriginalText(el) {
+    return el.getAttribute('data-ftc-hhmm') || el.textContent;
+  }
 
   /** Zlicza dni robocze Pn–Pt od start do end (włącznie) */
   function countWorkingDays(start, end) {
@@ -128,7 +137,7 @@
       foundRow = true;
       const tds = row.querySelectorAll('td');
       if (tds.length > CALC_TOTAL_TD_INDEX) {
-        if (parseHoursToMinutes(tds[CALC_TOTAL_TD_INDEX].textContent) > 0) hasHours = true;
+        if (parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX])) > 0) hasHours = true;
       }
     });
 
@@ -152,7 +161,7 @@
       if (!row.classList.contains('m-footer')) return;
       const tds = row.querySelectorAll('td');
       if (tds.length > CALC_TOTAL_TD_INDEX) {
-        totalWorkedMinutes += parseHoursToMinutes(tds[CALC_TOTAL_TD_INDEX].textContent);
+        totalWorkedMinutes += parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX]));
       }
     });
 
@@ -319,6 +328,35 @@
     }
   }
 
+  // ─── Konwersja kolumn Raw Total / Calc. Total do formatu HH:MM ───────────────
+
+  /**
+   * Zamienia wartości "X.XX hrs" na "HH:MM" w wierszach podsumowujących (m-footer).
+   * Oryginalna wartość jest zachowana w atrybucie data-ftc-hhmm, żeby calculate()
+   * mogło ją dalej odczytywać przez getOriginalText().
+   */
+  function convertTimesheetTotalsToHHMM() {
+    if (!isTimesheetPage()) return;
+    document.querySelectorAll('tr[data-group-date].m-footer').forEach((row) => {
+      row.querySelectorAll('td').forEach((td) => {
+        if (td.hasAttribute('data-ftc-hhmm')) return;
+        const text = td.textContent.trim();
+        const m = text.match(/^([\d.]+)\s*hrs?$/i);
+        if (!m) return;
+        const totalMin = Math.round(parseFloat(m[1]) * 60);
+        td.setAttribute('data-ftc-hhmm', text);
+        td.textContent = fmt2(Math.floor(totalMin / 60)) + ':' + fmt2(totalMin % 60);
+      });
+    });
+  }
+
+  function revertTimesheetTotals() {
+    document.querySelectorAll('tr[data-group-date].m-footer td[data-ftc-hhmm]').forEach((td) => {
+      td.textContent = td.getAttribute('data-ftc-hhmm');
+      td.removeAttribute('data-ftc-hhmm');
+    });
+  }
+
   // ─── Konwersja sald urlopowych z godzin na dni ────────────────────────────────
 
   function isVacationPage() {
@@ -449,7 +487,12 @@
   function tryCalculateAndShow() {
     if (!isTimesheetPage()) return false;
     const data = calculate();
-    if (data) { injectBanner(data); return true; }
+    if (data) {
+      injectBanner(data);
+      if (CFG.hhmmFormat) convertTimesheetTotalsToHHMM();
+      else revertTimesheetTotals();
+      return true;
+    }
     return false;
   }
 
@@ -505,6 +548,10 @@
       if (msg.manualNorm !== undefined) CFG.manualNorm = msg.manualNorm;
       if (msg.sickLeaveDays !== undefined) CFG.sickLeaveDays = msg.sickLeaveDays;
       if (msg.vacationInDays !== undefined) CFG.vacationInDays = msg.vacationInDays;
+      if (msg.hhmmFormat !== undefined) {
+        CFG.hhmmFormat = msg.hhmmFormat;
+        if (!CFG.hhmmFormat) revertTimesheetTotals();
+      }
       if (isVacationPage()) convertVacationBalancesToDays();
       tryCalculateAndShow();
     }
@@ -517,11 +564,12 @@
   async function init() {
     // Wczytaj ustawienia z chrome.storage
     try {
-      const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'sickLeaveDays', 'vacationInDays']);
+      const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'sickLeaveDays', 'vacationInDays', 'hhmmFormat']);
       if (stored.hoursPerDay) CFG.hoursPerDay = stored.hoursPerDay;
       if (stored.manualNorm  !== undefined) CFG.manualNorm  = stored.manualNorm;
       if (stored.sickLeaveDays !== undefined) CFG.sickLeaveDays = stored.sickLeaveDays;
       if (stored.vacationInDays !== undefined) CFG.vacationInDays = stored.vacationInDays;
+      if (stored.hhmmFormat !== undefined) CFG.hhmmFormat = stored.hhmmFormat;
     } catch (_) {}
 
     if (isTimesheetPage() || isVacationPage()) startPolling();

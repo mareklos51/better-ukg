@@ -160,7 +160,3 @@
   color: #e2e8f0;
 }
 
-/* Przesuń zawartość strony w dół, żeby baner nie przykrywał nagłówka UKG */
-body:has(#flex-time-calc-banner) {
-  padding-top: 38px !important;
-}
