@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Better UKG",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "UKG improvements created for GDM Gdansk. Automatic flex time calculation and hours -> days conversion.",
   "permissions": ["storage"],
   "host_permissions": ["https://*.saashr.com/*"],

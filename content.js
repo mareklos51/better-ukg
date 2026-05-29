@@ -144,6 +144,36 @@
     return foundRow && !hasHours;
   }
 
+  function isLastWorkingDayOfMonth(today, periodEnd) {
+    if (today > periodEnd) return false;
+    if (today.getDay() === 0 || today.getDay() === 6) return false;
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return countWorkingDays(tomorrow, periodEnd) === 0;
+  }
+
+  function getTodayStartTime(today) {
+    const todayMonth = today.getMonth();
+    const todayDay   = today.getDate();
+    for (const row of document.querySelectorAll('tr[data-group-date][data-shift-id]')) {
+      const parsed = parseDateAttr(row.getAttribute('data-group-date'));
+      if (!parsed) continue;
+      if (parsed.month !== todayMonth || parsed.day !== todayDay) continue;
+      const startInput = row.querySelector('input[name="start_time"]');
+      const endInput   = row.querySelector('input[name="end_time"]');
+      if (!startInput?.value) continue;
+      if (endInput?.value) continue;
+      return startInput.value;
+    }
+    return null;
+  }
+
+  function parseTimeHHMM(timeStr) {
+    const m = (timeStr || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  }
+
   function calculate() {
     // 1. Nagłówek okresu
     const titleEl = document.querySelector('span.c-timesheet-header__date-carousel-title');
@@ -232,6 +262,24 @@
     const balanceMinutes   = totalWorkedMinutes - normElapsedMinutes + sickLeaveAdjustMinutes;
     const remainingMinutes = normFullMonthMinutes - totalWorkedMinutes - sickLeaveAdjustMinutes;
 
+    let isLastWorkingDay = false;
+    let suggestedEndTime = null;
+    if (today <= period.end) {
+      isLastWorkingDay = isLastWorkingDayOfMonth(today, period.end);
+      if (isLastWorkingDay && remainingMinutes > 0) {
+        const startTimeStr = getTodayStartTime(today);
+        if (startTimeStr !== null) {
+          const startMins = parseTimeHHMM(startTimeStr);
+          if (startMins !== null) {
+            const endMins = startMins + remainingMinutes;
+            if (endMins < 24 * 60) {
+              suggestedEndTime = fmt2(Math.floor(endMins / 60)) + ':' + fmt2(endMins % 60);
+            }
+          }
+        }
+      }
+    }
+
     return {
       balanceMinutes,
       totalWorkedMinutes,
@@ -242,6 +290,8 @@
       remainingMinutes,
       overtimePayoutMinutes,
       sickLeaveAdjustMinutes,
+      isLastWorkingDay,
+      suggestedEndTime,
       periodText: titleEl.textContent.trim(),
     };
   }
@@ -260,10 +310,19 @@
       remainingMinutes,
       overtimePayoutMinutes,
       sickLeaveAdjustMinutes,
+      isLastWorkingDay,
+      suggestedEndTime,
     } = data;
 
     const isPositive = balanceMinutes >= 0;
     const normDone   = remainingMinutes <= 0;
+
+    const endSuggestionNote = (isLastWorkingDay && suggestedEndTime)
+      ? `<span class="ftc-sep">│</span>
+         <span class="ftc-end-suggest" title="Wyjście o tej godzinie wyzeruje saldo flex na koniec miesiąca">
+           🏁 Sugerowany koniec pracy: <strong>${suggestedEndTime}</strong>
+         </span>`
+      : '';
 
     const otNote = overtimePayoutMinutes > 0
       ? `<span class="ftc-sep">│</span>
@@ -307,6 +366,7 @@
           ? `✅ Norma wyrobiona! (${formatBalance(-remainingMinutes)} nadwyżki)`
           : `📋 Pozostało: <strong>${formatMinutes(remainingMinutes)}h</strong>`}
       </span>
+      ${endSuggestionNote}
       ${otNote}
       ${slNote}
       <button class="ftc-close" title="Ukryj baner">✕</button>

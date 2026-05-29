@@ -141,6 +141,21 @@
   white-space: nowrap;
 }
 
+/* Sugestia godziny wyjścia – ostatni dzień roboczy miesiąca */
+#flex-time-calc-banner .ftc-end-suggest {
+  color: #38bdf8;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: help;
+}
+
+#flex-time-calc-banner .ftc-end-suggest strong {
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 14px;
+  color: #7dd3fc;
+  font-weight: 700;
+}
+
 /* Przycisk zamknięcia */
 #flex-time-calc-banner .ftc-close {
   margin-left: auto;
