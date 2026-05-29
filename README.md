@@ -99,6 +99,11 @@ Identyczna procedura jak w Edge:
 
 ## Historia wersji
 
+### v1.3.0
+- Sumy godzin w formacie **HH:MM** zamiast `X.XX hrs` (toggle w ustawieniach)
+- Sick Leave dostępny bezpośrednio w banerze
+- Baner nie przesuwa już zawartości strony — naprawiono ucinanie ostatniego dnia miesiąca
+
 ### v1.2.0
 - Zmiana nazwy wtyczki na **Better UKG**
 - Przeliczanie sald urlopowych z godzin na dni na stronie **Time Off Balances** (Vacation i Childcare PTO)
@@ -117,4 +122,4 @@ Identyczna procedura jak w Edge:
 
 ---
 
-*Better UKG v1.2 by Marek Łoś · UKG Pro*
+*Better UKG v1.3 by Marek Łoś · UKG Pro*
