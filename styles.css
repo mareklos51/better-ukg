@@ -156,6 +156,44 @@
   font-weight: 700;
 }
 
+/* ─── Dzienny widget flex (pod Calc. Total każdego dnia) ─────────────────── */
+
+.ftc-daily-widget {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.ftc-daily-widget.ftc-dw-bg-pos {
+  background: #14532d;
+  border: 1px solid #166534;
+  color: #bbf7d0;
+}
+
+.ftc-daily-widget.ftc-dw-bg-neg {
+  background: #450a0a;
+  border: 1px solid #7f1d1d;
+  color: #fecaca;
+}
+
+.ftc-daily-widget .ftc-dw-sep {
+  opacity: 0.4;
+  font-weight: 400;
+}
+
+.ftc-daily-widget .ftc-dw-sum {
+  opacity: 0.85;
+}
+
 /* Przycisk zamknięcia */
 #flex-time-calc-banner .ftc-close {
   margin-left: auto;

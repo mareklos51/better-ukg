@@ -68,9 +68,15 @@
   /**
    * Zwraca oryginalny tekst komórki: jeśli została przekonwertowana do HH:MM,
    * atrybut data-ftc-hhmm przechowuje oryginalną wartość "X.XX hrs".
+   * Jeśli komórka zawiera widget .ftc-daily-widget, pomija go przy odczycie textContent.
    */
   function getOriginalText(el) {
-    return el.getAttribute('data-ftc-hhmm') || el.textContent;
+    if (el.hasAttribute('data-ftc-hhmm')) return el.getAttribute('data-ftc-hhmm');
+    const widget = el.querySelector('.ftc-daily-widget');
+    if (!widget) return el.textContent;
+    const clone = el.cloneNode(true);
+    clone.querySelector('.ftc-daily-widget').remove();
+    return clone.textContent.trim();
   }
 
   /** Zlicza dni robocze Pn–Pt od start do end (włącznie) */
@@ -465,6 +471,8 @@
     document.querySelectorAll('tr[data-group-date].m-footer').forEach((row) => {
       row.querySelectorAll('td').forEach((td) => {
         if (td.hasAttribute('data-ftc-hhmm')) return;
+        // Usuń widget przed parsowaniem — nie może zabrudzić textContent
+        td.querySelector('.ftc-daily-widget')?.remove();
         const text = td.textContent.trim();
         const m = text.match(/^([\d.]+)\s*hrs?$/i);
         if (!m) return;
@@ -479,6 +487,95 @@
     document.querySelectorAll('tr[data-group-date].m-footer td[data-ftc-hhmm]').forEach((td) => {
       td.textContent = td.getAttribute('data-ftc-hhmm');
       td.removeAttribute('data-ftc-hhmm');
+    });
+  }
+
+  // ─── Dzienny widget flex pod Calc. Total ──────────────────────────────────────
+
+  /**
+   * Pod sumą godzin każdego dnia (TD Calc. Total w m-footer) wstrzykuje mały widget
+   * pokazujący: delta danego dnia vs norma | bieżące saldo skumulowane.
+   * Dni z wpisem Time Off (Holiday, TOIL, itp.) są pomijane.
+   */
+  function injectDailyFlexWidgets() {
+    if (!isTimesheetPage()) return;
+
+    // Usuń stare widgety
+    document.querySelectorAll('.ftc-daily-widget').forEach((el) => el.remove());
+
+    // Daty z dowolnym wpisem Time Off — te dni pomijamy
+    const timeOffDates = new Set();
+    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
+      const input = row.querySelector('input[aria-label="Time Off"]');
+      if (!input) return;
+      const val = input.value || input.getAttribute('value') || '';
+      if (val.trim()) timeOffDates.add(row.getAttribute('data-group-date'));
+    });
+
+    // Overtime Payout per dzień — spójne z logiką bannera (odejmujemy per dzień)
+    const otPayoutByDate = {};
+    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
+      const activityInput = row.querySelector('input[aria-label="Activity"]');
+      if (!activityInput) return;
+      const actVal = activityInput.value || activityInput.getAttribute('value') || '';
+      if (!actVal.includes('Overtime Payout')) return;
+      const dateAttr = row.getAttribute('data-group-date');
+      const tds = [...row.querySelectorAll('td')];
+      const decimalTds = tds.filter((td) => /^\d+\.\d+$/.test(td.textContent.replace(/\s+/g, '').trim()));
+      const calcTd = decimalTds[1] ?? decimalTds[0];
+      if (!calcTd) return;
+      const mins = Math.round(parseFloat(calcTd.textContent.replace(/\s+/g, '')) * 60);
+      otPayoutByDate[dateAttr] = (otPayoutByDate[dateAttr] || 0) + mins;
+    });
+
+    // Zbierz i posortuj wiersze m-footer chronologicznie
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const footerRows = [];
+    document.querySelectorAll('tr[data-group-date].m-footer').forEach((row) => {
+      const dateAttr = row.getAttribute('data-group-date');
+      const parsed = parseDateAttr(dateAttr);
+      if (parsed) footerRows.push({ row, parsed, dateAttr });
+    });
+    footerRows.sort((a, b) =>
+      a.parsed.month !== b.parsed.month
+        ? a.parsed.month - b.parsed.month
+        : a.parsed.day - b.parsed.day
+    );
+
+    const normPerDay = CFG.hoursPerDay * 60;
+    let runningBalance = 0;
+
+    footerRows.forEach(({ row, parsed, dateAttr }) => {
+      if (timeOffDates.has(dateAttr)) return;
+
+      const rowDate = new Date(today.getFullYear(), parsed.month, parsed.day);
+      rowDate.setHours(0, 0, 0, 0);
+      if (rowDate > today) return;
+
+      // Pomiń weekendy (norma = 0, przepracowane = 0)
+      const dow = rowDate.getDay();
+      if (dow === 0 || dow === 6) return;
+
+      const tds = row.querySelectorAll('td');
+      if (tds.length <= CALC_TOTAL_TD_INDEX) return;
+      const rawMinutes = parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX]));
+      if (rawMinutes === 0) return; // dzień bez godzin — brak widgetu
+
+      // Odejmij OT Payout dla tego dnia — spójne z kalkulacją bannera
+      const workedMinutes = rawMinutes - (otPayoutByDate[dateAttr] || 0);
+      const dayDelta = workedMinutes - normPerDay;
+      runningBalance += dayDelta;
+
+      const bgClass  = runningBalance >= 0 ? 'ftc-dw-bg-pos' : 'ftc-dw-bg-neg';
+
+      const widget = document.createElement('div');
+      widget.className = `ftc-daily-widget ${bgClass}`;
+      widget.innerHTML =
+        `<span>${formatBalance(dayDelta)}</span>` +
+        `<span class="ftc-dw-sep">│</span>` +
+        `<span class="ftc-dw-sum">∑&nbsp;${formatBalance(runningBalance)}</span>`;
+      tds[CALC_TOTAL_TD_INDEX].appendChild(widget);
     });
   }
 
@@ -616,6 +713,7 @@
       injectBanner(data);
       if (CFG.hhmmFormat) convertTimesheetTotalsToHHMM();
       else revertTimesheetTotals();
+      injectDailyFlexWidgets();
       return true;
     }
     return false;

@@ -104,6 +104,14 @@ Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mie�
 
 ## Historia wersji
 
+### v1.5.0
+
+- **Dzienny widget flex** — pod sumą godzin każdego dnia pojawia się mały pasek z deltą dnia (`+01:00` / `-00:30`) oraz skumulowanym saldem flex (`∑ +01:00`). Tło zmienia się na zielone gdy saldo jest na plusie, czerwone gdy na minusie
+- **Holiday** — dni z wpisem *Time Off: Holiday* są automatycznie wykrywane i wyłączone z liczby dni roboczych; widoczne osobno w opisie normy: `176:00h (21 dni rob. (168h) + 1 Holiday (8h))`
+- **Time Off in Lieu (TOIL)** — godziny z wpisem *Time Off in Lieu* są odejmowane od przepracowanych godzin (analogicznie do Overtime Payout); widoczne w banerze jako `🔒 TOIL: 08:00h`
+- **Filtrowanie przyszłych dat** — wpisy z datą w przyszłości (np. Holiday wpisany z góry przez dział HR) nie wpływają na saldo flex bieżącego dnia
+- **Disclaimer** — informacja *"For informational purposes only"* dodana w opisie rozszerzenia, menu wtyczki i README
+
 ### v1.4.0
 - **Sugestia godziny wyjścia** na ostatni dzień roboczy miesiąca — po wpisaniu Clock In (bez Clock Out) baner pokazuje `🏁 Wyjdź o: HH:MM` — godzinę, o której należy wyjść, żeby wyzerować saldo flex
 
@@ -134,4 +142,4 @@ Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mie�
 
 > **Disclaimer:** This extension is for informational purposes only. The flex balance displayed is an estimate based on data read from the timesheet and may not reflect all factors affecting your working time. Always verify your hours independently using official UKG Pro reports.
 
-*Better UKG v1.4 by Marek Łoś · UKG Pro*
+*Better UKG v1.5 by Marek Łoś · UKG Pro*
