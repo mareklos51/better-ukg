@@ -2,6 +2,11 @@
 
 Rozszerzenie przeglądarki **Microsoft Edge / Chrome** dla systemu **UKG Pro**, które automatycznie oblicza saldo czasu elastycznego (flex) na podstawie timesheeta i wyświetla je jako pasek na górze strony. Dodatkowo przelicza salda urlopowe z godzin na dni.
 
+| Przeglądarka | Pobierz |
+|---|---|
+| **Edge / Chrome** | [better-ukg-1.5.0-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/edge-chrome/better-ukg-1.5.0-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.5.0-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/firefox/better-ukg-1.5.0-firefox.zip) |
+
 ---
 
 ## Funkcjonalności
