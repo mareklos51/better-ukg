@@ -130,4 +130,8 @@ Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mie�
 
 ---
 
+---
+
+> **Disclaimer:** This extension is for informational purposes only. The flex balance displayed is an estimate based on data read from the timesheet and may not reflect all factors affecting your working time. Always verify your hours independently using official UKG Pro reports.
+
 *Better UKG v1.4 by Marek Łoś · UKG Pro*

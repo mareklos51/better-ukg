@@ -182,13 +182,33 @@
     const period = parsePeriodDates(titleEl.textContent);
     if (!period) return null;
 
-    // 2. Suma "Calc. Total" ze wszystkich wierszy m-footer
+    // Wyznacz "dziś" wcześnie — potrzebne do filtrowania wierszy przyszłych dat
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const effectiveToday = today < period.end ? today : period.end;
+
+    // Pomocnik: konwertuje wynik parseDateAttr na obiekt Date (rok z okresu)
+    function rowToDate(parsed) {
+      if (!parsed) return null;
+      const d = new Date(period.start.getFullYear(), parsed.month, parsed.day);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
+    // 2. Suma "Calc. Total" ze wszystkich wierszy m-footer — TYLKO daty ≤ dziś.
+    //    Przyszłe wpisy (np. Time Off: Holiday z góry wpisane) nie są jeszcze "zarobione"
+    //    i nie powinny wpływać na saldo.
     let totalWorkedMinutes = 0;
     const allRows = document.querySelectorAll('tr[data-group-date]');
     if (allRows.length === 0) return null;   // timesheet się jeszcze ładuje
 
     allRows.forEach((row) => {
       if (!row.classList.contains('m-footer')) return;
+      const parsed = parseDateAttr(row.getAttribute('data-group-date'));
+      if (parsed) {
+        const rowDate = rowToDate(parsed);
+        if (rowDate && rowDate > effectiveToday) return; // pomiń przyszłe daty
+      }
       const tds = row.querySelectorAll('td');
       if (tds.length > CALC_TOTAL_TD_INDEX) {
         totalWorkedMinutes += parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX]));
@@ -233,11 +253,51 @@
       overtimePayoutMinutes += Math.round(parseFloat(hoursText) * 60);
     });
 
-    // 3. Minione dni robocze
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const effectiveToday = today < period.end ? today : period.end;
+    // 2c. Wykryj wpisy "Time Off: Holiday" — nie są dniami roboczymi, pokazujemy osobno.
+    //     Skanujemy WSZYSTKIE wpisy miesiąca (nie tylko ≤ dziś) dla celów wyświetlania normy.
+    const holidayDates = new Set();
+    let holidayMinutes = 0;
+    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
+      const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
+      if (!timeOffInput) return;
+      const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
+      if (!val.includes('Holiday')) return;
+      const dateAttr = row.getAttribute('data-group-date');
+      if (holidayDates.has(dateAttr)) return;
+      holidayDates.add(dateAttr);
+      const footerRow = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`);
+      if (footerRow) {
+        const tds = footerRow.querySelectorAll('td');
+        if (tds.length > CALC_TOTAL_TD_INDEX) {
+          holidayMinutes += parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX]));
+        }
+      }
+    });
+    const holidayCount = holidayDates.size;
 
+    // 2d. Odejmij godziny z wpisów "Time Off in Lieu" — pracownik wziął dzień wolny w zamian
+    //     za przepracowane nadgodziny. Te 8h NIE wlicza się do przepracowanego czasu flex,
+    //     bo norma dla tego dnia nadal obowiązuje (dzień jest dniem roboczym w kalendarzu).
+    const toilDates = new Set();
+    let toilMinutes = 0;
+    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
+      const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
+      if (!timeOffInput) return;
+      const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
+      if (!val.includes('Time Off in Lieu')) return;
+      const dateAttr = row.getAttribute('data-group-date');
+      if (toilDates.has(dateAttr)) return;
+      toilDates.add(dateAttr);
+      const footerRow = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`);
+      if (footerRow) {
+        const tds = footerRow.querySelectorAll('td');
+        if (tds.length > CALC_TOTAL_TD_INDEX) {
+          toilMinutes += parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX]));
+        }
+      }
+    });
+
+    // 3. Minione dni robocze
     // Jeśli dziś jest dzień roboczy bez wpisanych godzin, nie naliczaj normy za dziś
     let normEndDate = effectiveToday;
     const todayIsWeekday = effectiveToday.getDay() !== 0 && effectiveToday.getDay() !== 6;
@@ -256,7 +316,7 @@
       ? Math.round(CFG.manualNorm * 60)
       : fullMonthWorkingDays * normPerDay;
 
-    totalWorkedMinutes -= overtimePayoutMinutes;
+    totalWorkedMinutes -= overtimePayoutMinutes + toilMinutes;
 
     const sickLeaveAdjustMinutes = CFG.sickLeaveDays * CFG.hoursPerDay * 60;
     const balanceMinutes   = totalWorkedMinutes - normElapsedMinutes + sickLeaveAdjustMinutes;
@@ -289,7 +349,10 @@
       fullMonthWorkingDays,
       remainingMinutes,
       overtimePayoutMinutes,
+      toilMinutes,
       sickLeaveAdjustMinutes,
+      holidayCount,
+      holidayMinutes,
       isLastWorkingDay,
       suggestedEndTime,
       periodText: titleEl.textContent.trim(),
@@ -309,7 +372,10 @@
       fullMonthWorkingDays,
       remainingMinutes,
       overtimePayoutMinutes,
+      toilMinutes,
       sickLeaveAdjustMinutes,
+      holidayCount,
+      holidayMinutes,
       isLastWorkingDay,
       suggestedEndTime,
     } = data;
@@ -324,10 +390,10 @@
          </span>`
       : '';
 
-    const otNote = overtimePayoutMinutes > 0
+    const otNote = (overtimePayoutMinutes > 0 || toilMinutes > 0)
       ? `<span class="ftc-sep">│</span>
-         <span class="ftc-ot" title="Godziny Overtime Payout wykluczone z kalkulacji flex">
-           🔒 OT: ${formatMinutes(overtimePayoutMinutes)}h
+         <span class="ftc-ot" title="Godziny wykluczone z kalkulacji flex">
+           🔒${overtimePayoutMinutes > 0 ? ` OT: ${formatMinutes(overtimePayoutMinutes)}h` : ''}${toilMinutes > 0 ? ` TOIL: ${formatMinutes(toilMinutes)}h` : ''}
          </span>`
       : '';
 
@@ -357,8 +423,7 @@
       <span class="ftc-sep">│</span>
       <span class="ftc-detail">
         Przepracowano: <strong>${formatMinutes(totalWorkedMinutes)}h</strong>
-        / ${formatMinutes(normFullMonthMinutes)}h
-        <em>(${fullMonthWorkingDays} dni rob.)</em>
+        / <em>${formatMinutes(normFullMonthMinutes)}h (${fullMonthWorkingDays - holidayCount} dni rob. (${formatMinutes(normFullMonthMinutes - holidayMinutes)}h)${holidayCount > 0 ? ` + ${holidayCount} Holiday (${formatMinutes(holidayMinutes)}h)` : ''})</em>
       </span>
       <span class="ftc-sep">│</span>
       <span class="ftc-detail ${normDone ? 'ftc-done' : 'ftc-remaining'}">
