@@ -3,7 +3,7 @@ set -euo pipefail
 
 VERSION=$(grep '"version"' manifest.json | sed 's/.*"version": "\(.*\)".*/\1/')
 
-CHROMIUM_OUT="better-ukg-${VERSION}-chromium.zip"
+CHROMIUM_OUT="better-ukg-${VERSION}-edge-chrome.zip"
 FIREFOX_OUT="better-ukg-${VERSION}-firefox.zip"
 
 # Pliki wchodzące do każdej paczki
@@ -17,7 +17,7 @@ FILES=(
 )
 
 build_chromium() {
-  echo "▶ Chromium / Edge..."
+  echo "▶ Edge / Chrome..."
   rm -f "$CHROMIUM_OUT"
   zip -qr "$CHROMIUM_OUT" manifest.json "${FILES[@]}"
   echo "  ✓ $CHROMIUM_OUT ($(du -sh "$CHROMIUM_OUT" | cut -f1))"
