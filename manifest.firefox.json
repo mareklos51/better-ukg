@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Better UKG",
+  "version": "1.5.0",
+  "description": "UKG improvements created for GDM Gdansk. Automatic flex time calculation and hours -> days conversion. For informational purposes only — always verify your hours independently.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "better-ukg@mareklos51",
+      "strict_min_version": "109.0"
+    }
+  },
+  "permissions": ["storage"],
+  "host_permissions": ["https://*.saashr.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://*.saashr.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Better UKG",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
