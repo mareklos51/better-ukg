@@ -281,25 +281,31 @@
     });
     const holidayCount = holidayDates.size;
 
-    // 2d. Odejmij godziny z wpisów "Time Off in Lieu" — pracownik wziął dzień wolny w zamian
-    //     za przepracowane nadgodziny. Te 8h NIE wlicza się do przepracowanego czasu flex,
-    //     bo norma dla tego dnia nadal obowiązuje (dzień jest dniem roboczym w kalendarzu).
-    const toilDates = new Set();
+    // 2d. Odejmij godziny z wpisów "Time Off in Lieu" — pracownik wziął wolne w zamian
+    //     za przepracowane nadgodziny. Odejmujemy z poziomu wpisu (entry-level), nie z m-footer —
+    //     to jedyna metoda poprawna dla częściowego TOIL (np. 1.5h TOIL + 4.7h pracy tego samego
+    //     dnia: footer = 6.2h, ale odejść należy tylko 1.5h).
+    //
+    //     Wiersze Time Off mają inną strukturę niż wpisy pracy: godziny są w
+    //     input[aria-label="Raw Total"], a nie w czystym decimal TD (jak w OT Payout).
     let toilMinutes = 0;
+    const toilByDateCalc = {};   // dateAttr → TOIL minut (do obliczenia fullToilNorm)
     document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
       const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
       if (!timeOffInput) return;
       const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
       if (!val.toLowerCase().includes('time off in lieu')) return;
-      const dateAttr = row.getAttribute('data-group-date');
-      if (toilDates.has(dateAttr)) return;
-      toilDates.add(dateAttr);
-      const footerRow = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`);
-      if (footerRow) {
-        const tds = footerRow.querySelectorAll('td');
-        if (tds.length > CALC_TOTAL_TD_INDEX) {
-          toilMinutes += parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX]));
-        }
+
+      const rawTotalInput = row.querySelector('input[aria-label="Raw Total"]');
+      const hoursStr = rawTotalInput
+        ? (rawTotalInput.value || rawTotalInput.getAttribute('value') || '')
+        : '';
+      const hours = parseFloat(hoursStr);
+      if (!isNaN(hours) && hours > 0) {
+        const mins = Math.round(hours * 60);
+        toilMinutes += mins;
+        const dateAttr = row.getAttribute('data-group-date');
+        toilByDateCalc[dateAttr] = (toilByDateCalc[dateAttr] || 0) + mins;
       }
     });
 
@@ -322,10 +328,36 @@
       ? Math.round(CFG.manualNorm * 60)
       : fullMonthWorkingDays * normPerDay;
 
+    // Pełne dni TOIL (cały m-footer = TOIL, brak zwykłej pracy): norma za te dni nie obowiązuje —
+    // pracownik wziął dzień wolny z banku flex, więc kosztem jest tylko TOIL, nie norma vs 0h.
+    // fullToilNormElapsedMinutes anuluje normę tych dni w formule salda.
+    let fullToilNormElapsedMinutes = 0;
+    for (const [dateAttr, toilMins] of Object.entries(toilByDateCalc)) {
+      const parsed = parseDateAttr(dateAttr);
+      if (!parsed) continue;
+      const rowDate = rowToDate(parsed);
+      if (!rowDate || rowDate > effectiveToday) continue;
+      const dow = rowDate.getDay();
+      if (dow === 0 || dow === 6) continue;
+      const footerRow = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`);
+      if (!footerRow) continue;
+      const ftds = footerRow.querySelectorAll('td');
+      if (ftds.length <= CALC_TOTAL_TD_INDEX) continue;
+      const footerTotal = parseHoursToMinutes(getOriginalText(ftds[CALC_TOTAL_TD_INDEX]));
+      if (footerTotal > 0 && toilMins >= footerTotal) {
+        fullToilNormElapsedMinutes += normPerDay;
+      }
+    }
+
     totalWorkedMinutes -= overtimePayoutMinutes + toilMinutes;
 
     const sickLeaveAdjustMinutes = CFG.sickLeaveDays * CFG.hoursPerDay * 60;
-    const balanceMinutes   = totalWorkedMinutes - normElapsedMinutes + sickLeaveAdjustMinutes;
+
+    // Formuła salda:
+    //   saldo = (przepracowane_bez_TOIL) − (norma_bez_pełnych_dni_TOIL) − (wszystkie_TOIL)
+    // = totalWorked − normElapsed + fullToilNorm − toilMinutes + sickLeave
+    // (totalWorked jest już po odjęciu toilMinutes, stąd odejmujemy toilMinutes jeszcze raz)
+    const balanceMinutes   = totalWorkedMinutes - normElapsedMinutes + fullToilNormElapsedMinutes - toilMinutes + sickLeaveAdjustMinutes;
     const remainingMinutes = normFullMonthMinutes - totalWorkedMinutes - sickLeaveAdjustMinutes;
 
     let isLastWorkingDay = false;
@@ -503,13 +535,35 @@
     // Usuń stare widgety
     document.querySelectorAll('.ftc-daily-widget').forEach((el) => el.remove());
 
-    // Daty z dowolnym wpisem Time Off — te dni pomijamy
+    // Daty z wpisem Time Off innym niż TOIL (Holiday, Vacation itp.) — te dni pomijamy w widgecie.
+    // TOIL jest traktowany jak OT Payout: odejmujemy jego godziny per-dzień zamiast pomijać cały dzień.
     const timeOffDates = new Set();
     document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
       const input = row.querySelector('input[aria-label="Time Off"]');
       if (!input) return;
       const val = input.value || input.getAttribute('value') || '';
-      if (val.trim()) timeOffDates.add(row.getAttribute('data-group-date'));
+      if (!val.trim()) return;
+      if (val.toLowerCase().includes('time off in lieu')) return; // TOIL: obsługiwany osobno poniżej
+      timeOffDates.add(row.getAttribute('data-group-date'));
+    });
+
+    // TOIL per dzień — entry-level z input[aria-label="Raw Total"] (wiersze Time Off
+    // nie mają decimal TDs jak wpisy pracy, tylko input Raw Total)
+    const toilByDate = {};
+    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
+      const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
+      if (!timeOffInput) return;
+      const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
+      if (!val.toLowerCase().includes('time off in lieu')) return;
+      const dateAttr = row.getAttribute('data-group-date');
+      const rawTotalInput = row.querySelector('input[aria-label="Raw Total"]');
+      const hoursStr = rawTotalInput
+        ? (rawTotalInput.value || rawTotalInput.getAttribute('value') || '')
+        : '';
+      const hours = parseFloat(hoursStr);
+      if (!isNaN(hours) && hours > 0) {
+        toilByDate[dateAttr] = (toilByDate[dateAttr] || 0) + Math.round(hours * 60);
+      }
     });
 
     // Overtime Payout per dzień — spójne z logiką bannera (odejmujemy per dzień)
@@ -562,9 +616,14 @@
       const rawMinutes = parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX]));
       if (rawMinutes === 0) return; // dzień bez godzin — brak widgetu
 
-      // Odejmij OT Payout dla tego dnia — spójne z kalkulacją bannera
-      const workedMinutes = rawMinutes - (otPayoutByDate[dateAttr] || 0);
-      const dayDelta = workedMinutes - normPerDay;
+      // Odejmij OT Payout i TOIL — spójne z kalkulacją bannera:
+      // - pełny dzień TOIL (workedMinutes == 0): koszt = tylko TOIL, norma nie obowiązuje
+      // - częściowy TOIL + praca: koszt = deficyt_pracy + TOIL
+      const toilForDay = toilByDate[dateAttr] || 0;
+      const workedMinutes = rawMinutes - (otPayoutByDate[dateAttr] || 0) - toilForDay;
+      const dayDelta = workedMinutes === 0 && toilForDay > 0
+        ? -toilForDay
+        : workedMinutes - normPerDay - toilForDay;
       runningBalance += dayDelta;
 
       const bgClass  = runningBalance >= 0 ? 'ftc-dw-bg-pos' : 'ftc-dw-bg-neg';
