@@ -290,7 +290,7 @@
       const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
       if (!timeOffInput) return;
       const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
-      if (!val.includes('Time Off in Lieu')) return;
+      if (!val.toLowerCase().includes('time off in lieu')) return;
       const dateAttr = row.getAttribute('data-group-date');
       if (toilDates.has(dateAttr)) return;
       toilDates.add(dateAttr);

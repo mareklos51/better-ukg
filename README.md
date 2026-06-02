@@ -4,8 +4,8 @@ Rozszerzenie przeglądarki **Microsoft Edge / Chrome** dla systemu **UKG Pro**, 
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.5.0-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/edge-chrome/better-ukg-1.5.0-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.0-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/firefox/better-ukg-1.5.0-firefox.zip) |
+| **Edge / Chrome** | [better-ukg-1.5.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/edge-chrome/better-ukg-1.5.1-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.5.1-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/firefox/better-ukg-1.5.1-firefox.zip) |
 
 ---
 
@@ -73,8 +73,8 @@ Pobierz paczkę odpowiednią dla swojej przeglądarki:
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.5.0-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/edge-chrome/better-ukg-1.5.0-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.0-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/firefox/better-ukg-1.5.0-firefox.zip) |
+| **Edge / Chrome** | [better-ukg-1.5.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/edge-chrome/better-ukg-1.5.1-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.5.1-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/firefox/better-ukg-1.5.1-firefox.zip) |
 
 Rozpakuj archiwum w dowolnym folderze (np. na pulpicie)
 
@@ -111,6 +111,10 @@ Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mie�
 ---
 
 ## Historia wersji
+
+### v1.5.1
+
+- **Bugfix:** Poprawiono wykrywanie wpisów *Time Off in Lieu* — UKG zapisuje wartość jako `"Time Off In Lieu"` (duże I i L), przez co porównanie case-sensitive nie znajdowało wpisów i TOIL nie był odejmowany z salda flex
 
 ### v1.5.0
 
@@ -150,4 +154,4 @@ Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mie�
 
 > **Disclaimer:** This extension is for informational purposes only. The flex balance displayed is an estimate based on data read from the timesheet and may not reflect all factors affecting your working time. Always verify your hours independently using official UKG Pro reports.
 
-*Better UKG v1.5 by Marek Łoś · UKG Pro*
+*Better UKG v1.5.1 by Marek Łoś · UKG Pro*
