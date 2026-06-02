@@ -4,8 +4,8 @@ Rozszerzenie przeglądarki **Microsoft Edge / Chrome** dla systemu **UKG Pro**, 
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.5.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.1/better-ukg-1.5.1-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.1-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.1/better-ukg-1.5.1-firefox.zip) |
+| **Edge / Chrome** | [better-ukg-1.5.2-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.2/better-ukg-1.5.2-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.5.2-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.2/better-ukg-1.5.2-firefox.zip) |
 
 ---
 
@@ -73,8 +73,8 @@ Pobierz paczkę odpowiednią dla swojej przeglądarki:
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.5.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.1/better-ukg-1.5.1-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.1-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.1/better-ukg-1.5.1-firefox.zip) |
+| **Edge / Chrome** | [better-ukg-1.5.2-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.2/better-ukg-1.5.2-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.5.2-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.2/better-ukg-1.5.2-firefox.zip) |
 
 Rozpakuj archiwum w dowolnym folderze (np. na pulpicie)
 
@@ -111,6 +111,10 @@ Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mie�
 ---
 
 ## Historia wersji
+
+### v1.5.2
+
+- **UX:** Dzienny widget flex — neutralne tło zamiast kolorowania całego pola; kolor tekstu każdej wartości zależy od jej znaku niezależnie: delta dnia i suma skumulowana mają osobne kolory (zielony `+` / czerwony `−`), co pozwala odczytać oba sygnały jednocześnie (np. `+01:00` zielony, ale `∑ −04:00` czerwony)
 
 ### v1.5.1
 
@@ -154,4 +158,4 @@ Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mie�
 
 > **Disclaimer:** This extension is for informational purposes only. The flex balance displayed is an estimate based on data read from the timesheet and may not reflect all factors affecting your working time. Always verify your hours independently using official UKG Pro reports.
 
-*Better UKG v1.5.1 by Marek Łoś · UKG Pro*
+*Better UKG v1.5.2 by Marek Łoś · UKG Pro*

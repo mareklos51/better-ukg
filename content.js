@@ -626,14 +626,15 @@
         : workedMinutes - normPerDay - toilForDay;
       runningBalance += dayDelta;
 
-      const bgClass  = runningBalance >= 0 ? 'ftc-dw-bg-pos' : 'ftc-dw-bg-neg';
+      const deltaClass = dayDelta >= 0 ? 'ftc-dw-pos' : 'ftc-dw-neg';
+      const sumClass   = runningBalance >= 0 ? 'ftc-dw-sum-pos' : 'ftc-dw-sum-neg';
 
       const widget = document.createElement('div');
-      widget.className = `ftc-daily-widget ${bgClass}`;
+      widget.className = 'ftc-daily-widget';
       widget.innerHTML =
-        `<span>${formatBalance(dayDelta)}</span>` +
+        `<span class="${deltaClass}">${formatBalance(dayDelta)}</span>` +
         `<span class="ftc-dw-sep">│</span>` +
-        `<span class="ftc-dw-sum">∑&nbsp;${formatBalance(runningBalance)}</span>`;
+        `<span class="ftc-dw-sum ${sumClass}">∑&nbsp;${formatBalance(runningBalance)}</span>`;
       tds[CALC_TOTAL_TD_INDEX].appendChild(widget);
     });
   }
