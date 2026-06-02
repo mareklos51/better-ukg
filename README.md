@@ -4,8 +4,8 @@ Rozszerzenie przeglądarki **Microsoft Edge / Chrome** dla systemu **UKG Pro**, 
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.5.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/edge-chrome/better-ukg-1.5.1-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.1-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/firefox/better-ukg-1.5.1-firefox.zip) |
+| **Edge / Chrome** | [better-ukg-1.5.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.1/better-ukg-1.5.1-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.5.1-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.1/better-ukg-1.5.1-firefox.zip) |
 
 ---
 
@@ -73,8 +73,8 @@ Pobierz paczkę odpowiednią dla swojej przeglądarki:
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.5.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/edge-chrome/better-ukg-1.5.1-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.1-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/firefox/better-ukg-1.5.1-firefox.zip) |
+| **Edge / Chrome** | [better-ukg-1.5.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.1/better-ukg-1.5.1-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.5.1-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.1/better-ukg-1.5.1-firefox.zip) |
 
 Rozpakuj archiwum w dowolnym folderze (np. na pulpicie)
 
