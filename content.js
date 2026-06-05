@@ -309,6 +309,20 @@
       }
     });
 
+    // 2e. Wykryj dni z wpisem Time Off (nie-TOIL, nie-Holiday) gdzie UKG nie wykazuje
+    //     godzin w m-footer — np. Blood Donation, Vacation itp. Norma za te dni
+    //     nie powinna obowiązywać (analogicznie do pełnych dni TOIL).
+    const absenceTimeOffDates = new Set();
+    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
+      const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
+      if (!timeOffInput) return;
+      const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
+      if (!val.trim()) return;
+      if (val.toLowerCase().includes('time off in lieu')) return; // TOIL — obsługiwany w 2d
+      if (val.toLowerCase().includes('holiday')) return;          // Holiday — UKG wpisuje godziny do m-footer
+      absenceTimeOffDates.add(row.getAttribute('data-group-date'));
+    });
+
     // 3. Minione dni robocze
     // Jeśli dziś jest dzień roboczy bez wpisanych godzin, nie naliczaj normy za dziś
     let normEndDate = effectiveToday;
@@ -323,6 +337,25 @@
 
     // 4. Normy
     const normPerDay            = CFG.hoursPerDay * 60;
+
+    // Dla każdego dnia z wpisem absencji (2e) gdzie m-footer = 0h (system nie naliczył godzin)
+    // anuluj normę za ten dzień — pracownik miał ustawowo wolne, nie powinien mieć deficytu.
+    let absenceNormAdjustMinutes = 0;
+    for (const dateAttr of absenceTimeOffDates) {
+      const parsed = parseDateAttr(dateAttr);
+      if (!parsed) continue;
+      const rowDate = rowToDate(parsed);
+      if (!rowDate || rowDate > effectiveToday) continue;
+      const dow = rowDate.getDay();
+      if (dow === 0 || dow === 6) continue;
+      const footerRow = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`);
+      if (!footerRow) continue;
+      const ftds = footerRow.querySelectorAll('td');
+      if (ftds.length <= CALC_TOTAL_TD_INDEX) continue;
+      const footerTotal = parseHoursToMinutes(getOriginalText(ftds[CALC_TOTAL_TD_INDEX]));
+      if (footerTotal === 0) absenceNormAdjustMinutes += normPerDay;
+    }
+
     const normElapsedMinutes    = elapsedWorkingDays * normPerDay;
     const normFullMonthMinutes  = CFG.manualNorm > 0
       ? Math.round(CFG.manualNorm * 60)
@@ -354,10 +387,10 @@
     const sickLeaveAdjustMinutes = CFG.sickLeaveDays * CFG.hoursPerDay * 60;
 
     // Formuła salda:
-    //   saldo = (przepracowane_bez_TOIL) − (norma_bez_pełnych_dni_TOIL) − (wszystkie_TOIL)
-    // = totalWorked − normElapsed + fullToilNorm − toilMinutes + sickLeave
+    //   saldo = przepracowane_bez_TOIL − norma_bez_pełnych_dni_TOIL − TOIL + sickLeave + absenceAdj
+    // absenceAdj: norma za dni absencji (Blood Donation, itp.) gdzie UKG nie wykazało godzin
     // (totalWorked jest już po odjęciu toilMinutes, stąd odejmujemy toilMinutes jeszcze raz)
-    const balanceMinutes   = totalWorkedMinutes - normElapsedMinutes + fullToilNormElapsedMinutes - toilMinutes + sickLeaveAdjustMinutes;
+    const balanceMinutes   = totalWorkedMinutes - normElapsedMinutes + fullToilNormElapsedMinutes - toilMinutes + sickLeaveAdjustMinutes + absenceNormAdjustMinutes;
     const remainingMinutes = normFullMonthMinutes - totalWorkedMinutes - sickLeaveAdjustMinutes;
 
     let isLastWorkingDay = false;
