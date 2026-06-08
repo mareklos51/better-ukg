@@ -2,6 +2,16 @@
   "manifest_version": 3,
   "name": "Better UKG",
   "version": "1.5.3",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "better-ukg@gdm-gdansk",
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "required": [],
+        "optional": []
+      }
+    }
+  },
   "description": "UKG improvements created for GDM Gdansk. Automatic flex time calculation and hours -> days conversion. For informational purposes only — always verify your hours independently.",
   "permissions": ["storage"],
   "host_permissions": ["https://*.saashr.com/*"],

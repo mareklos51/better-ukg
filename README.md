@@ -1,11 +1,11 @@
 # ⏱ Better UKG
 
-Rozszerzenie przeglądarki **Microsoft Edge / Chrome** dla systemu **UKG Pro**, które automatycznie oblicza saldo czasu elastycznego (flex) na podstawie timesheeta i wyświetla je jako pasek na górze strony. Dodatkowo przelicza salda urlopowe z godzin na dni.
+Rozszerzenie przeglądarki **Microsoft Edge / Chrome / Firefox** dla systemu **UKG Pro**, które automatycznie oblicza saldo czasu elastycznego (flex) na podstawie timesheeta i wyświetla je jako pasek na górze strony. Dodatkowo przelicza salda urlopowe z godzin na dni.
 
 | Przeglądarka | Pobierz |
 |---|---|
 | **Edge / Chrome** | [better-ukg-1.5.3-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.3-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-firefox.zip) |
+| **Firefox** | [better-ukg-1.5.3-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-firefox.xpi) |
 
 ---
 
@@ -74,7 +74,7 @@ Pobierz paczkę odpowiednią dla swojej przeglądarki:
 | Przeglądarka | Pobierz |
 |---|---|
 | **Edge / Chrome** | [better-ukg-1.5.3-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.3-firefox.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-firefox.zip) |
+| **Firefox** | [better-ukg-1.5.3-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-firefox.xpi) |
 
 Rozpakuj archiwum w dowolnym folderze (np. na pulpicie)
 
@@ -107,6 +107,20 @@ Przejdź do timesheeta w UKG Pro — baner z saldem flex pojawi się automatyczn
 Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mieć szybki dostęp do panelu ustawień.
 
 ![Przypnij rozszerzenie do paska](assets/6-optional-pin-the-addon.png)
+
+---
+
+## Instalacja w Firefox
+
+### Krok 1 – Pobierz plik
+
+Pobierz plik [better-ukg-1.5.3-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-firefox.xpi)
+
+### Krok 2 – Zainstaluj
+
+Kliknij pobrany plik `.xpi` — Firefox wyświetli okienko z pytaniem o instalację. Kliknij **Dodaj**.
+
+Gotowe — wtyczka jest zainstalowana na stałe i nie wymaga trybu dewelopera.
 
 ---
 
