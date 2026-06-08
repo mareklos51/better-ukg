@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.3] – 2026-06-08
+
+### Zmieniono
+- **Korekta ręczna (h)** – pole *Sick Leave (dni)* zastąpione polem *Korekta ręczna* w godzinach; obsługuje wartości dodatnie, ujemne i ułamkowe (np. `-4`, `+8`, `-4.5`). Używaj gdy wtyczka liczy coś błędnie z powodu niestandardowej konfiguracji UKG.
+
+### Naprawiono
+- **Absencja w bieżącym dniu** – gdy dzień dzisiejszy jest dniem absencji (Child Care, Blood Donation, Vacation on Demand itp.) z zerem godzin w `Calc.Total`, saldo flex było zawyżone o wartość całodniowej normy. Błąd wynikał z jednoczesnego działania logiki `isTodayEmpty` i `absenceNormAdjust`, które wzajemnie się dublowały. Naprawiono przez wyłączenie `isTodayEmpty` dla dni z wpisem absencji.
+
+---
+
 ## [1.3.0] – 2026-05-29
 
 ### Dodano

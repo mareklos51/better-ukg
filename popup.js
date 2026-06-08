@@ -27,18 +27,18 @@ function hide(id) { document.getElementById(id).style.display = 'none'; }
 
 async function init() {
   // Wczytaj ustawienia
-  const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'sickLeaveDays', 'vacationInDays', 'hhmmFormat']);
-  const hoursPerDay     = stored.hoursPerDay   ?? HOURS_PER_DAY_DEFAULT;
-  const manualNorm      = stored.manualNorm    ?? 0;
-  const sickLeaveDays   = stored.sickLeaveDays ?? 0;
-  const vacationInDays  = stored.vacationInDays ?? true;
-  const hhmmFormat      = stored.hhmmFormat    ?? true;
+  const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'correctionHours', 'vacationInDays', 'hhmmFormat']);
+  const hoursPerDay     = stored.hoursPerDay    ?? HOURS_PER_DAY_DEFAULT;
+  const manualNorm      = stored.manualNorm     ?? 0;
+  const correctionHours = stored.correctionHours ?? 0;
+  const vacationInDays  = stored.vacationInDays  ?? true;
+  const hhmmFormat      = stored.hhmmFormat     ?? true;
 
-  document.getElementById('hours-per-day').value    = hoursPerDay;
-  document.getElementById('manual-norm').value      = manualNorm;
-  document.getElementById('sick-leave-days').value  = sickLeaveDays;
+  document.getElementById('hours-per-day').value      = hoursPerDay;
+  document.getElementById('manual-norm').value        = manualNorm;
+  document.getElementById('correction-hours').value   = correctionHours;
   document.getElementById('vacation-in-days').checked = vacationInDays;
-  document.getElementById('hhmm-format').checked    = hhmmFormat;
+  document.getElementById('hhmm-format').checked      = hhmmFormat;
 
   // Pobierz dane z aktywnej karty (content.js)
   let tab;
@@ -71,7 +71,7 @@ async function init() {
     return;
   }
 
-  renderData(data, hoursPerDay, manualNorm, sickLeaveDays);
+  renderData(data, correctionHours);
 }
 
 function showError(msg) {
@@ -86,7 +86,7 @@ function showError(msg) {
   document.querySelector('.stats').style.display = 'none';
 }
 
-function renderData(data, hoursPerDay, manualNorm, sickLeaveDays) {
+function renderData(data, correctionHours) {
   hide('loading');
   show('main-content');
 
@@ -132,10 +132,11 @@ function renderData(data, hoursPerDay, manualNorm, sickLeaveDays) {
   const otInfo = data.overtimePayoutMinutes > 0
     ? `\n🔒 Overtime Payout wykluczone: ${formatMinutes(data.overtimePayoutMinutes)}h`
     : '';
-  const slInfo = sickLeaveDays > 0
-    ? `\n🏥 Sick Leave: ${sickLeaveDays} dni (+${formatMinutes(sickLeaveDays * hoursPerDay * 60)}h do flex)`
+  const corrSign = correctionHours > 0 ? '+' : '';
+  const corrInfo = correctionHours !== 0
+    ? `\n🔧 Korekta ręczna: ${corrSign}${correctionHours}h (${corrSign}${formatMinutes(Math.round(correctionHours * 60))}h)`
     : '';
-  infoBox.textContent = `📅 Okres: ${periodText}${otInfo}${slInfo}`;
+  infoBox.textContent = `📅 Okres: ${periodText}${otInfo}${corrInfo}`;
 }
 
 // ─── Zapis ustawień ───────────────────────────────────────────────────────────
@@ -164,13 +165,13 @@ document.getElementById('hhmm-format').addEventListener('change', async (e) => {
 });
 
 document.getElementById('save-btn').addEventListener('click', async () => {
-  const hoursPerDay    = parseFloat(document.getElementById('hours-per-day').value)  || HOURS_PER_DAY_DEFAULT;
-  const manualNorm     = parseFloat(document.getElementById('manual-norm').value)     || 0;
-  const sickLeaveDays  = parseInt(document.getElementById('sick-leave-days').value)   || 0;
-  const vacationInDays = document.getElementById('vacation-in-days').checked;
-  const hhmmFormat     = document.getElementById('hhmm-format').checked;
+  const hoursPerDay     = parseFloat(document.getElementById('hours-per-day').value)    || HOURS_PER_DAY_DEFAULT;
+  const manualNorm      = parseFloat(document.getElementById('manual-norm').value)      || 0;
+  const correctionHours = parseFloat(document.getElementById('correction-hours').value) || 0;
+  const vacationInDays  = document.getElementById('vacation-in-days').checked;
+  const hhmmFormat      = document.getElementById('hhmm-format').checked;
 
-  await chrome.storage.local.set({ hoursPerDay, manualNorm, sickLeaveDays, vacationInDays, hhmmFormat });
+  await chrome.storage.local.set({ hoursPerDay, manualNorm, correctionHours, vacationInDays, hhmmFormat });
 
   // Poinformuj content.js o nowych ustawieniach i odśwież widok
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -180,7 +181,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
         action: 'settingsUpdated',
         hoursPerDay,
         manualNorm,
-        sickLeaveDays,
+        correctionHours,
         vacationInDays,
         hhmmFormat,
       });

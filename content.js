@@ -17,7 +17,7 @@
   let CFG = {
     hoursPerDay: 8,       // norma godzin dziennie
     manualNorm: 0,        // ręczna norma miesiąca (godziny); 0 = auto
-    sickLeaveDays: 0,     // dni Sick Leave bez wpisu w timesheecie
+    correctionHours: 0,   // ręczna korekta salda flex w godzinach (może być ujemna)
     vacationInDays: true, // wyświetlaj salda urlopowe w dniach (zamiast godzin)
     hhmmFormat: true,     // wyświetlaj sumy godzin w formacie HH:MM zamiast X.XX hrs
   };
@@ -324,10 +324,17 @@
     });
 
     // 3. Minione dni robocze
-    // Jeśli dziś jest dzień roboczy bez wpisanych godzin, nie naliczaj normy za dziś
+    // Jeśli dziś jest dzień roboczy bez wpisanych godzin, nie naliczaj normy za dziś.
+    // Wyjątek: jeśli 0h wynika z absencji (2e), pomiń przesunięcie — absenceNormAdjust już to obsłuży.
+    const todayIsAbsenceDay = [...absenceTimeOffDates].some(dateAttr => {
+      const parsed = parseDateAttr(dateAttr);
+      if (!parsed) return false;
+      const d = rowToDate(parsed);
+      return d && d.getTime() === today.getTime();
+    });
     let normEndDate = effectiveToday;
     const todayIsWeekday = effectiveToday.getDay() !== 0 && effectiveToday.getDay() !== 6;
-    if (todayIsWeekday && effectiveToday.getTime() === today.getTime() && isTodayEmpty(today)) {
+    if (todayIsWeekday && !todayIsAbsenceDay && effectiveToday.getTime() === today.getTime() && isTodayEmpty(today)) {
       normEndDate = new Date(today);
       normEndDate.setDate(normEndDate.getDate() - 1);
     }
@@ -384,14 +391,14 @@
 
     totalWorkedMinutes -= overtimePayoutMinutes + toilMinutes;
 
-    const sickLeaveAdjustMinutes = CFG.sickLeaveDays * CFG.hoursPerDay * 60;
+    const correctionMinutes = Math.round(CFG.correctionHours * 60);
 
     // Formuła salda:
-    //   saldo = przepracowane_bez_TOIL − norma_bez_pełnych_dni_TOIL − TOIL + sickLeave + absenceAdj
+    //   saldo = przepracowane_bez_TOIL − norma_bez_pełnych_dni_TOIL − TOIL + korekta + absenceAdj
     // absenceAdj: norma za dni absencji (Blood Donation, itp.) gdzie UKG nie wykazało godzin
     // (totalWorked jest już po odjęciu toilMinutes, stąd odejmujemy toilMinutes jeszcze raz)
-    const balanceMinutes   = totalWorkedMinutes - normElapsedMinutes + fullToilNormElapsedMinutes - toilMinutes + sickLeaveAdjustMinutes + absenceNormAdjustMinutes;
-    const remainingMinutes = normFullMonthMinutes - totalWorkedMinutes - sickLeaveAdjustMinutes;
+    const balanceMinutes   = totalWorkedMinutes - normElapsedMinutes + fullToilNormElapsedMinutes - toilMinutes + correctionMinutes + absenceNormAdjustMinutes;
+    const remainingMinutes = normFullMonthMinutes - totalWorkedMinutes - correctionMinutes;
 
     let isLastWorkingDay = false;
     let suggestedEndTime = null;
@@ -421,7 +428,7 @@
       remainingMinutes,
       overtimePayoutMinutes,
       toilMinutes,
-      sickLeaveAdjustMinutes,
+      correctionMinutes,
       holidayCount,
       holidayMinutes,
       isLastWorkingDay,
@@ -444,7 +451,7 @@
       remainingMinutes,
       overtimePayoutMinutes,
       toilMinutes,
-      sickLeaveAdjustMinutes,
+      correctionMinutes,
       holidayCount,
       holidayMinutes,
       isLastWorkingDay,
@@ -468,16 +475,17 @@
          </span>`
       : '';
 
-    const slAdjLabel = sickLeaveAdjustMinutes > 0
-      ? ` <span class="ftc-sl-adj">(+${formatMinutes(sickLeaveAdjustMinutes)}h)</span>`
+    const corrSign = correctionMinutes > 0 ? '+' : '';
+    const slAdjLabel = correctionMinutes !== 0
+      ? ` <span class="ftc-sl-adj">(${corrSign}${formatMinutes(correctionMinutes)}h)</span>`
       : '';
     const slNote = `
       <span class="ftc-sep">│</span>
       <span class="ftc-sl">
-        🏥 <span class="ftc-sl-label">Sick Leave:</span>
-        <input type="number" class="ftc-sl-input" min="0" max="31" value="${CFG.sickLeaveDays}"
-               title="Dni Sick Leave w tym miesiącu bez wpisu w timesheecie — dodaje ${CFG.hoursPerDay}h za każdy dzień do salda flex">
-        <span class="ftc-sl-unit">dni</span>${slAdjLabel}
+        🔧 <span class="ftc-sl-label">Korekta:</span>
+        <input type="number" class="ftc-sl-input" step="0.5" value="${CFG.correctionHours}"
+               title="Ręczna korekta salda flex w godzinach — np. -4, +8, -4.5. Użyj gdy wtyczka liczy coś błędnie.">
+        <span class="ftc-sl-unit">h</span>${slAdjLabel}
       </span>`;
 
     const banner = document.createElement('div');
@@ -515,10 +523,10 @@
     const slInput = banner.querySelector('.ftc-sl-input');
     if (slInput) {
       slInput.addEventListener('change', () => {
-        const days = Math.max(0, parseInt(slInput.value) || 0);
-        slInput.value = days;
-        CFG.sickLeaveDays = days;
-        chrome.storage.local.set({ sickLeaveDays: days });
+        const hours = parseFloat(slInput.value) || 0;
+        slInput.value = hours;
+        CFG.correctionHours = hours;
+        chrome.storage.local.set({ correctionHours: hours });
         tryCalculateAndShow();
       });
     }
@@ -862,7 +870,7 @@
     if (msg.action === 'settingsUpdated') {
       if (msg.hoursPerDay) CFG.hoursPerDay = msg.hoursPerDay;
       if (msg.manualNorm !== undefined) CFG.manualNorm = msg.manualNorm;
-      if (msg.sickLeaveDays !== undefined) CFG.sickLeaveDays = msg.sickLeaveDays;
+      if (msg.correctionHours !== undefined) CFG.correctionHours = msg.correctionHours;
       if (msg.vacationInDays !== undefined) CFG.vacationInDays = msg.vacationInDays;
       if (msg.hhmmFormat !== undefined) {
         CFG.hhmmFormat = msg.hhmmFormat;
@@ -880,10 +888,10 @@
   async function init() {
     // Wczytaj ustawienia z chrome.storage
     try {
-      const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'sickLeaveDays', 'vacationInDays', 'hhmmFormat']);
+      const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'correctionHours', 'vacationInDays', 'hhmmFormat']);
       if (stored.hoursPerDay) CFG.hoursPerDay = stored.hoursPerDay;
       if (stored.manualNorm  !== undefined) CFG.manualNorm  = stored.manualNorm;
-      if (stored.sickLeaveDays !== undefined) CFG.sickLeaveDays = stored.sickLeaveDays;
+      if (stored.correctionHours !== undefined) CFG.correctionHours = stored.correctionHours;
       if (stored.vacationInDays !== undefined) CFG.vacationInDays = stored.vacationInDays;
       if (stored.hhmmFormat !== undefined) CFG.hhmmFormat = stored.hhmmFormat;
     } catch (_) {}
