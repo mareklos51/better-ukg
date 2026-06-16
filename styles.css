@@ -141,6 +141,10 @@
   white-space: nowrap;
 }
 
+#flex-time-calc-banner .ftc-sl-adj--neg {
+  color: #f87171;
+}
+
 /* Sugestia godziny wyjścia – ostatni dzień roboczy miesiąca */
 #flex-time-calc-banner .ftc-end-suggest {
   color: #38bdf8;
@@ -199,6 +203,18 @@
 .ftc-daily-widget .ftc-dw-sep {
   color: #94a3b8;
   font-weight: 400;
+}
+
+/* ─── Niedokończony dzień (Clock In bez Clock Out, dzień przeszły) ───────── */
+
+tr.ftc-incomplete-row,
+tr.ftc-incomplete-row td {
+  background-color: rgba(248, 113, 113, 0.14) !important;
+}
+
+tr.ftc-incomplete-row:hover,
+tr.ftc-incomplete-row:hover td {
+  background-color: rgba(248, 113, 113, 0.22) !important;
 }
 
 /* Przycisk zamknięcia */

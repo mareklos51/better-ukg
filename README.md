@@ -126,6 +126,11 @@ Gotowe — wtyczka jest zainstalowana na stałe i nie wymaga trybu dewelopera.
 
 ## Historia wersji
 
+### v1.5.4
+
+- **Podświetlanie niedokończonych dni** — przeszłe dni robocze bez żadnych godzin w *Raw Total* (np. *Clock In* bez *Clock Out*, albo całkiem pusty dzień) są delikatnie zaznaczane czerwonym tłem. Dni z wpisem pracy lub absencji są pomijane, podobnie dzień bieżący i weekendy.
+- **Ujemna korekta** — wartość ujemnej korekty ręcznej w banerze pokazywana ze znakiem `−` i na czerwono.
+
 ### v1.5.3
 
 - **Korekta ręczna** — pole *Sick Leave (dni)* zastąpione polem `🔧 Korekta ręczna (h)`, które przyjmuje dowolną liczbę godzin ze znakiem (np. `-4`, `+8`, `-4.5`). Przydatne gdy UKG liczy coś niestandardowo i wtyczka pokazuje błędne saldo.
@@ -177,4 +182,4 @@ Gotowe — wtyczka jest zainstalowana na stałe i nie wymaga trybu dewelopera.
 
 > **Disclaimer:** This extension is for informational purposes only. The flex balance displayed is an estimate based on data read from the timesheet and may not reflect all factors affecting your working time. Always verify your hours independently using official UKG Pro reports.
 
-*Better UKG v1.5.3 by Marek Łoś · UKG Pro*
+*Better UKG v1.5.4 by Marek Łoś · UKG Pro*

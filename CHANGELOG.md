@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.4] – 2026-06-16
+
+### Dodano
+- **Podświetlanie niedokończonych dni** – przeszłe dni robocze (Pn–Pt) bez żadnych godzin w kolumnie *Raw Total* są delikatnie zaznaczane czerwonym tłem. Wyłapuje to typowy błąd: wpisany *Clock In* bez *Clock Out* (Raw Total pusty) oraz całkiem puste dni robocze. Dni z dowolnym wpisem (praca lub absencja: Holiday, Vacation, Blood Donation itp.) mają Raw Total > 0, więc nie są zaznaczane. Dzień bieżący i weekendy są pomijane.
+
+### Zmieniono
+- **Ujemna korekta w banerze** – wartość ujemnej korekty ręcznej jest teraz pokazywana ze znakiem `−` i czerwonym kolorem (wcześniej bez znaku).
+
 ## [1.5.3] – 2026-06-08
 
 ### Zmieniono

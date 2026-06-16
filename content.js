@@ -475,9 +475,10 @@
          </span>`
       : '';
 
-    const corrSign = correctionMinutes > 0 ? '+' : '';
+    const corrSign = correctionMinutes > 0 ? '+' : (correctionMinutes < 0 ? '−' : '');
+    const corrClass = correctionMinutes < 0 ? 'ftc-sl-adj ftc-sl-adj--neg' : 'ftc-sl-adj';
     const slAdjLabel = correctionMinutes !== 0
-      ? ` <span class="ftc-sl-adj">(${corrSign}${formatMinutes(correctionMinutes)}h)</span>`
+      ? ` <span class="${corrClass}">(${corrSign}${formatMinutes(correctionMinutes)}h)</span>`
       : '';
     const slNote = `
       <span class="ftc-sep">│</span>
@@ -680,6 +681,85 @@
     });
   }
 
+  // ─── Podświetlanie niedokończonych dni (Clock In bez Clock Out) ───────────────
+
+  /**
+   * Zaznacza delikatnie czerwonym tłem przeszłe dni robocze, które wyglądają na
+   * pominięte. Kryterium: brak godzin w kolumnie Raw Total dla danego dnia.
+   *
+   * Dlaczego Raw Total, a nie kod Time Off: kodów absencji jest mnóstwo (Holiday,
+   * Vacation, Paid Absence, Blood Donation, …) i nie da się ich wszystkich wyliczyć.
+   * Każdy taki wpis ma jednak Raw Total > 0, więc dzień z dowolnym wpisem (praca lub
+   * absencja) NIE jest zaznaczany. Zaznaczane są tylko dni bez żadnych godzin:
+   *   - wiersz zegarowy z Clock In, ale bez Clock Out → Raw Total pusty,
+   *   - całkiem pusty dzień (sam wiersz-nagłówek m-header, brak wpisów).
+   *
+   * Zaznacza TYLKO przeszłe dni robocze (rowDate < dziś, Pn–Pt). Dzień bieżący i
+   * weekendy są pomijane.
+   */
+  function highlightIncompleteDays() {
+    if (!isTimesheetPage()) return;
+
+    // Usuń stare zaznaczenia
+    document.querySelectorAll('.ftc-incomplete-row').forEach((el) =>
+      el.classList.remove('ftc-incomplete-row'));
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Przeszły dzień roboczy (Pn–Pt, przed dziś)?
+    function isPastWeekday(dateAttr) {
+      const parsed = parseDateAttr(dateAttr);
+      if (!parsed) return false;
+      const d = new Date(today.getFullYear(), parsed.month, parsed.day);
+      d.setHours(0, 0, 0, 0);
+      if (d >= today) return false;            // tylko przeszłość (pomijamy dziś i przyszłość)
+      const dow = d.getDay();
+      if (dow === 0 || dow === 6) return false; // pomiń weekendy
+      return true;
+    }
+
+    // Zmapuj daty → wiersze wpisów oraz czy którykolwiek wpis ma Raw Total > 0.
+    const entryRowsByDate   = {};   // dateAttr → [tr, ...]
+    const hasRawTotalByDate = {};   // dateAttr → bool
+    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
+      const dateAttr = row.getAttribute('data-group-date');
+      if (!entryRowsByDate[dateAttr]) entryRowsByDate[dateAttr] = [];
+      entryRowsByDate[dateAttr].push(row);
+
+      const rawInput = row.querySelector('input[aria-label="Raw Total"]');
+      const rawStr = rawInput
+        ? (rawInput.value || rawInput.getAttribute('value') || '').trim()
+        : '';
+      const rawNum = parseFloat(rawStr);
+      if (!isNaN(rawNum) && rawNum > 0) hasRawTotalByDate[dateAttr] = true;
+    });
+
+    // Wiersze-nagłówki pustych dni (brak data-shift-id, brak m-footer).
+    const headerByDate = {};
+    document.querySelectorAll('tr[data-group-date].m-header').forEach((row) => {
+      headerByDate[row.getAttribute('data-group-date')] = row;
+    });
+
+    // Wszystkie daty z wpisami + daty samych nagłówków
+    const allDates = new Set([
+      ...Object.keys(entryRowsByDate),
+      ...Object.keys(headerByDate),
+    ]);
+
+    allDates.forEach((dateAttr) => {
+      if (!isPastWeekday(dateAttr)) return;
+      if (hasRawTotalByDate[dateAttr]) return; // dzień ma godziny (praca lub absencja) — ok
+
+      const rows = entryRowsByDate[dateAttr];
+      if (rows && rows.length) {
+        rows.forEach((r) => r.classList.add('ftc-incomplete-row')); // np. Clock In bez Clock Out
+      } else if (headerByDate[dateAttr]) {
+        headerByDate[dateAttr].classList.add('ftc-incomplete-row');  // całkiem pusty dzień
+      }
+    });
+  }
+
   // ─── Konwersja sald urlopowych z godzin na dni ────────────────────────────────
 
   function isVacationPage() {
@@ -815,6 +895,7 @@
       if (CFG.hhmmFormat) convertTimesheetTotalsToHHMM();
       else revertTimesheetTotals();
       injectDailyFlexWidgets();
+      highlightIncompleteDays();
       return true;
     }
     return false;

@@ -1,10 +1,13 @@
 # Plik instrukcji dla Claude Code — lokalny, nie trafia do repo
 CLAUDE.md
 
-# Zrzuty HTML timesheeta — zawierają dane osobowe, nie trafiają do repo
-timesheet.html
-timesheet-overtime.html
-timesheet-*.html
+# Notatki robocze — lokalne, nie trafiają do repo
+functionality-suggestions.md
+
+# Zrzuty HTML strony UKG (timesheet/vacation) — zawierają dane osobowe, nie trafiają do repo
+# Ignorujemy wszystkie .html PRÓCZ popup.html (część rozszerzenia)
+*.html
+!popup.html
 
 # Archiwum ZIP — generowane lokalnie
 *.zip
