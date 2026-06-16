@@ -5,8 +5,6 @@
  * a ustawienia przechowuje w chrome.storage.local.
  */
 
-const HOURS_PER_DAY_DEFAULT = 8;
-
 // ─── Pomocnicze ──────────────────────────────────────────────────────────────
 
 function formatMinutes(minutes) {
@@ -27,16 +25,12 @@ function hide(id) { document.getElementById(id).style.display = 'none'; }
 
 async function init() {
   // Wczytaj ustawienia
-  const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'correctionHours', 'vacationInDays', 'hhmmFormat']);
-  const hoursPerDay     = stored.hoursPerDay    ?? HOURS_PER_DAY_DEFAULT;
+  const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays', 'hhmmFormat']);
   const manualNorm      = stored.manualNorm     ?? 0;
-  const correctionHours = stored.correctionHours ?? 0;
   const vacationInDays  = stored.vacationInDays  ?? true;
   const hhmmFormat      = stored.hhmmFormat     ?? true;
 
-  document.getElementById('hours-per-day').value      = hoursPerDay;
   document.getElementById('manual-norm').value        = manualNorm;
-  document.getElementById('correction-hours').value   = correctionHours;
   document.getElementById('vacation-in-days').checked = vacationInDays;
   document.getElementById('hhmm-format').checked      = hhmmFormat;
 
@@ -71,7 +65,7 @@ async function init() {
     return;
   }
 
-  renderData(data, correctionHours);
+  renderData(data);
 }
 
 function showError(msg) {
@@ -86,9 +80,11 @@ function showError(msg) {
   document.querySelector('.stats').style.display = 'none';
 }
 
-function renderData(data, correctionHours) {
+function renderData(data) {
   hide('loading');
   show('main-content');
+
+  const correctionHours = data.effCorrectionHours ?? 0;
 
   const {
     balanceMinutes,
@@ -134,9 +130,15 @@ function renderData(data, correctionHours) {
     : '';
   const corrSign = correctionHours > 0 ? '+' : '';
   const corrInfo = correctionHours !== 0
-    ? `\n🔧 Korekta ręczna: ${corrSign}${correctionHours}h (${corrSign}${formatMinutes(Math.round(correctionHours * 60))}h)`
+    ? `\n🔧 Korekta (${data.monthKey || 'ten miesiąc'}): ${corrSign}${correctionHours}h (${corrSign}${formatMinutes(Math.round(correctionHours * 60))}h)`
     : '';
-  infoBox.textContent = `📅 Okres: ${periodText}${otInfo}${corrInfo}`;
+  const personInfo = (data.personScope === 'employee' && data.personName)
+    ? `\n👤 ${data.personName}`
+    : '';
+  const etatInfo = data.hasPersonHours
+    ? `\n🧑‍💼 Etat: ${data.effHoursPerDay}h/dzień (zapamiętany)`
+    : '';
+  infoBox.textContent = `📅 Okres: ${periodText}${personInfo}${etatInfo}${otInfo}${corrInfo}`;
 }
 
 // ─── Zapis ustawień ───────────────────────────────────────────────────────────
@@ -165,13 +167,11 @@ document.getElementById('hhmm-format').addEventListener('change', async (e) => {
 });
 
 document.getElementById('save-btn').addEventListener('click', async () => {
-  const hoursPerDay     = parseFloat(document.getElementById('hours-per-day').value)    || HOURS_PER_DAY_DEFAULT;
   const manualNorm      = parseFloat(document.getElementById('manual-norm').value)      || 0;
-  const correctionHours = parseFloat(document.getElementById('correction-hours').value) || 0;
   const vacationInDays  = document.getElementById('vacation-in-days').checked;
   const hhmmFormat      = document.getElementById('hhmm-format').checked;
 
-  await chrome.storage.local.set({ hoursPerDay, manualNorm, correctionHours, vacationInDays, hhmmFormat });
+  await chrome.storage.local.set({ manualNorm, vacationInDays, hhmmFormat });
 
   // Poinformuj content.js o nowych ustawieniach i odśwież widok
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -179,9 +179,7 @@ document.getElementById('save-btn').addEventListener('click', async () => {
     try {
       await chrome.tabs.sendMessage(tab.id, {
         action: 'settingsUpdated',
-        hoursPerDay,
         manualNorm,
-        correctionHours,
         vacationInDays,
         hhmmFormat,
       });

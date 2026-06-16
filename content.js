@@ -14,13 +14,37 @@
   'use strict';
 
   // ─── Konfiguracja (nadpisywana przez chrome.storage) ─────────────────────────
+  // Standardowy etat (pełny) — stała, nieedytowalna. Wyjątki (np. 7/8) ustawia się
+  // indywidualnie per osoba wprost na banerze. Nie ma globalnego etatu, bo łatwo nim
+  // przez pomyłkę narzucić nietypową normę wszystkim pracownikom naraz.
+  const DEFAULT_HOURS_PER_DAY = 8;
+
   let CFG = {
-    hoursPerDay: 8,       // norma godzin dziennie
     manualNorm: 0,        // ręczna norma miesiąca (godziny); 0 = auto
-    correctionHours: 0,   // ręczna korekta salda flex w godzinach (może być ujemna)
     vacationInDays: true, // wyświetlaj salda urlopowe w dniach (zamiast godzin)
     hhmmFormat: true,     // wyświetlaj sumy godzin w formacie HH:MM zamiast X.XX hrs
   };
+
+  // ─── Pamięć per osoba ────────────────────────────────────────────────────────
+  //
+  // Każdy timesheet ma na górze imię/nazwisko + numer pracowniczy "(5978)" (widok
+  // menedżera). Pod tym numerem zapamiętujemy ustawienia danej osoby. We własnym
+  // widoku ("My Time") brak kontekstu pracownika → klucz "self".
+  //
+  // Struktura:
+  //   personData["5978"] = {
+  //     name: "Halina Stosik-Fleszar",
+  //     hoursPerDay: 7,                          // etat — TRWAŁY (obowiązuje co miesiąc)
+  //     months: { "2026-05": { correctionHours: 16 } }  // korekta — per MIESIĄC (auto-reset)
+  //   }
+  //
+  // Rozwiązywanie wartości dla bieżącego widoku (EFF):
+  //   hoursPerDay     = personData[key].hoursPerDay        ?? DEFAULT_HOURS_PER_DAY (standard 8h)
+  //   correctionHours = personData[key].months[ym].correctionHours ?? 0       (świeża co miesiąc)
+  let personData      = {};                                   // ładowane z chrome.storage
+  let currentPerson   = { key: 'self', name: '', scope: 'self' };
+  let currentMonthKey = null;
+  let EFF = { hoursPerDay: 8, manualNorm: 0, correctionHours: 0 }; // wartości obowiązujące w bieżącym widoku
 
   const BANNER_ID            = 'flex-time-calc-banner';
   const CALC_TOTAL_TD_INDEX  = 5;    // indeks kolumny "Calc. Total" w TR timesheeta
@@ -107,6 +131,88 @@
     return { start, end };
   }
 
+  // ─── Identyfikacja osoby i pamięć ustawień ───────────────────────────────────
+
+  function escapeHtml(str) {
+    return (str || '').replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  /**
+   * Ustala kontekst osoby z nagłówka timesheeta.
+   * - Widok menedżera (Manage): jest blok .c-user-context z imieniem i numerem
+   *   pracowniczym w nawiasie "(5978)" → klucz = numer.
+   * - Własny widok (My Time): brak tego bloku → klucz "self".
+   */
+  function getPersonContext() {
+    const heading  = document.querySelector('.c-user-context__heading-link');
+    const textInfo = document.querySelector('.c-user-context__user-text-info');
+    if (heading || textInfo) {
+      const name = (heading?.textContent || '').trim();
+      const m = (textInfo?.textContent || '').match(/\((\d+)\)/);
+      if (m) return { key: m[1], name: name || ('#' + m[1]), scope: 'employee' };
+      if (name) return { key: 'name:' + name.toLowerCase(), name, scope: 'employee' };
+    }
+    return { key: 'self', name: '', scope: 'self' };
+  }
+
+  /** Period start → klucz miesiąca "YYYY-MM". */
+  function getMonthKey(period) {
+    const d = period.start;
+    return d.getFullYear() + '-' + fmt2(d.getMonth() + 1);
+  }
+
+  /** Wartości obowiązujące dla danej osoby w danym miesiącu (override > globalne). */
+  function resolveEffective(person, monthKey) {
+    const eff = {
+      hoursPerDay:     DEFAULT_HOURS_PER_DAY,  // standard; tylko indywidualny override go zmienia
+      manualNorm:      CFG.manualNorm,
+      correctionHours: 0,                      // korekta świeża co miesiąc (brak fallbacku globalnego)
+    };
+    const p = personData[person.key];
+    if (p) {
+      if (typeof p.hoursPerDay === 'number') eff.hoursPerDay = p.hoursPerDay;
+      const mo = p.months && p.months[monthKey];
+      if (mo && typeof mo.correctionHours === 'number') eff.correctionHours = mo.correctionHours;
+    }
+    return eff;
+  }
+
+  function ensurePerson(key, name) {
+    if (!personData[key]) personData[key] = { months: {} };
+    if (!personData[key].months) personData[key].months = {};
+    if (name) personData[key].name = name;
+    return personData[key];
+  }
+
+  function persistPersonData() {
+    try { chrome.storage.local.set({ personData }); } catch (_) {}
+  }
+
+  /** Zapisz korektę osoby na konkretny miesiąc. 0 = usuń (powrót do domyślnego 0). */
+  function setPersonCorrection(key, name, monthKey, hours) {
+    const p = ensurePerson(key, name);
+    if (!p.months[monthKey]) p.months[monthKey] = {};
+    if (!hours) {
+      delete p.months[monthKey].correctionHours;
+      if (Object.keys(p.months[monthKey]).length === 0) delete p.months[monthKey];
+    } else {
+      p.months[monthKey].correctionHours = hours;
+    }
+    persistPersonData();
+  }
+
+  /** Zapisz etat osoby (trwały). null lub równy standardowi (8h) = usuń override. */
+  function setPersonHoursPerDay(key, name, hours) {
+    const p = ensurePerson(key, name);
+    if (hours === null || isNaN(hours) || hours === DEFAULT_HOURS_PER_DAY) {
+      delete p.hoursPerDay;
+    } else {
+      p.hoursPerDay = hours;
+    }
+    persistPersonData();
+  }
+
   // ─── Główna kalkulacja ────────────────────────────────────────────────────────
 
   /**
@@ -187,6 +293,11 @@
 
     const period = parsePeriodDates(titleEl.textContent);
     if (!period) return null;
+
+    // Ustal osobę (z nagłówka) i miesiąc → rozwiąż wartości obowiązujące (etat, korekta).
+    currentPerson   = getPersonContext();
+    currentMonthKey = getMonthKey(period);
+    EFF             = resolveEffective(currentPerson, currentMonthKey);
 
     // Wyznacz "dziś" wcześnie — potrzebne do filtrowania wierszy przyszłych dat
     const today = new Date();
@@ -343,7 +454,7 @@
     const fullMonthWorkingDays = countWorkingDays(period.start, period.end);
 
     // 4. Normy
-    const normPerDay            = CFG.hoursPerDay * 60;
+    const normPerDay            = EFF.hoursPerDay * 60;
 
     // Dla każdego dnia z wpisem absencji (2e) gdzie m-footer = 0h (system nie naliczył godzin)
     // anuluj normę za ten dzień — pracownik miał ustawowo wolne, nie powinien mieć deficytu.
@@ -364,8 +475,8 @@
     }
 
     const normElapsedMinutes    = elapsedWorkingDays * normPerDay;
-    const normFullMonthMinutes  = CFG.manualNorm > 0
-      ? Math.round(CFG.manualNorm * 60)
+    const normFullMonthMinutes  = EFF.manualNorm > 0
+      ? Math.round(EFF.manualNorm * 60)
       : fullMonthWorkingDays * normPerDay;
 
     // Pełne dni TOIL (cały m-footer = TOIL, brak zwykłej pracy): norma za te dni nie obowiązuje —
@@ -391,7 +502,7 @@
 
     totalWorkedMinutes -= overtimePayoutMinutes + toilMinutes;
 
-    const correctionMinutes = Math.round(CFG.correctionHours * 60);
+    const correctionMinutes = Math.round(EFF.correctionHours * 60);
 
     // Formuła salda:
     //   saldo = przepracowane_bez_TOIL − norma_bez_pełnych_dni_TOIL − TOIL + korekta + absenceAdj
@@ -434,6 +545,13 @@
       isLastWorkingDay,
       suggestedEndTime,
       periodText: titleEl.textContent.trim(),
+      // Kontekst osoby + rozwiązane ustawienia (dla banera i popupu)
+      personName:        currentPerson.name,
+      personScope:       currentPerson.scope,
+      monthKey:          currentMonthKey,
+      effHoursPerDay:    EFF.hoursPerDay,
+      effCorrectionHours: EFF.correctionHours,
+      hasPersonHours:    !!(personData[currentPerson.key] && typeof personData[currentPerson.key].hoursPerDay === 'number'),
     };
   }
 
@@ -475,6 +593,27 @@
          </span>`
       : '';
 
+    // Kontekst osoby — pokazuje, dla kogo zapamiętywane są etat/korekta.
+    const personLabel = (currentPerson.scope === 'employee' && currentPerson.name)
+      ? currentPerson.name
+      : 'Twój timesheet';
+    const personNote = `
+      <span class="ftc-sep">│</span>
+      <span class="ftc-person" title="Etat i korekta są zapamiętywane dla tej osoby (miesiąc ${currentMonthKey})">
+        👤 <span class="ftc-person-name">${escapeHtml(personLabel)}</span>
+      </span>`;
+
+    // Etat (norma h/dzień) — trwały per osoba. 💾 = zapisany własny etat (różny od globalnego).
+    const etatCustom = data.hasPersonHours;
+    const etatNote = `
+      <span class="ftc-sep">│</span>
+      <span class="ftc-etat${etatCustom ? ' ftc-etat--custom' : ''}"
+            title="Norma godzin dziennie tej osoby (np. 7 = etat 7/8). Zapamiętywana na stałe. Wpisz ${DEFAULT_HOURS_PER_DAY} (standard), aby usunąć własny etat.">
+        🧑‍💼 <span class="ftc-etat-label">Etat:</span>
+        <input type="number" class="ftc-etat-input" step="0.5" min="0" max="24" value="${data.effHoursPerDay}">
+        <span class="ftc-etat-unit">h/dz</span>${etatCustom ? ' <span class="ftc-saved-mark" title="Zapamiętany etat tej osoby">💾</span>' : ''}
+      </span>`;
+
     const corrSign = correctionMinutes > 0 ? '+' : (correctionMinutes < 0 ? '−' : '');
     const corrClass = correctionMinutes < 0 ? 'ftc-sl-adj ftc-sl-adj--neg' : 'ftc-sl-adj';
     const slAdjLabel = correctionMinutes !== 0
@@ -484,8 +623,8 @@
       <span class="ftc-sep">│</span>
       <span class="ftc-sl">
         🔧 <span class="ftc-sl-label">Korekta:</span>
-        <input type="number" class="ftc-sl-input" step="0.5" value="${CFG.correctionHours}"
-               title="Ręczna korekta salda flex w godzinach — np. -4, +8, -4.5. Użyj gdy wtyczka liczy coś błędnie.">
+        <input type="number" class="ftc-sl-input" step="0.5" value="${data.effCorrectionHours}"
+               title="Ręczna korekta salda flex w godzinach dla tej osoby na ${currentMonthKey} — np. -4, +8, -4.5. Zapamiętywana per miesiąc (świeża w nowym miesiącu).">
         <span class="ftc-sl-unit">h</span>${slAdjLabel}
       </span>`;
 
@@ -513,6 +652,8 @@
       </span>
       ${endSuggestionNote}
       ${otNote}
+      ${personNote}
+      ${etatNote}
       ${slNote}
       <button class="ftc-close" title="Ukryj baner">✕</button>
     `;
@@ -521,13 +662,23 @@
 
     banner.querySelector('.ftc-close').addEventListener('click', () => banner.remove());
 
+    // Korekta — zapis per osoba + bieżący miesiąc.
     const slInput = banner.querySelector('.ftc-sl-input');
     if (slInput) {
       slInput.addEventListener('change', () => {
         const hours = parseFloat(slInput.value) || 0;
         slInput.value = hours;
-        CFG.correctionHours = hours;
-        chrome.storage.local.set({ correctionHours: hours });
+        setPersonCorrection(currentPerson.key, currentPerson.name, currentMonthKey, hours);
+        tryCalculateAndShow();
+      });
+    }
+
+    // Etat — zapis trwały per osoba.
+    const etatInput = banner.querySelector('.ftc-etat-input');
+    if (etatInput) {
+      etatInput.addEventListener('change', () => {
+        const hours = parseFloat(etatInput.value);
+        setPersonHoursPerDay(currentPerson.key, currentPerson.name, isNaN(hours) ? null : hours);
         tryCalculateAndShow();
       });
     }
@@ -639,7 +790,7 @@
         : a.parsed.day - b.parsed.day
     );
 
-    const normPerDay = CFG.hoursPerDay * 60;
+    const normPerDay = EFF.hoursPerDay * 60;   // etat osoby (ustalony w calculate())
     let runningBalance = 0;
 
     footerRows.forEach(({ row, parsed, dateAttr }) => {
@@ -949,9 +1100,7 @@
     }
 
     if (msg.action === 'settingsUpdated') {
-      if (msg.hoursPerDay) CFG.hoursPerDay = msg.hoursPerDay;
       if (msg.manualNorm !== undefined) CFG.manualNorm = msg.manualNorm;
-      if (msg.correctionHours !== undefined) CFG.correctionHours = msg.correctionHours;
       if (msg.vacationInDays !== undefined) CFG.vacationInDays = msg.vacationInDays;
       if (msg.hhmmFormat !== undefined) {
         CFG.hhmmFormat = msg.hhmmFormat;
@@ -969,12 +1118,14 @@
   async function init() {
     // Wczytaj ustawienia z chrome.storage
     try {
-      const stored = await chrome.storage.local.get(['hoursPerDay', 'manualNorm', 'correctionHours', 'vacationInDays', 'hhmmFormat']);
-      if (stored.hoursPerDay) CFG.hoursPerDay = stored.hoursPerDay;
+      const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays', 'hhmmFormat', 'personData']);
       if (stored.manualNorm  !== undefined) CFG.manualNorm  = stored.manualNorm;
-      if (stored.correctionHours !== undefined) CFG.correctionHours = stored.correctionHours;
       if (stored.vacationInDays !== undefined) CFG.vacationInDays = stored.vacationInDays;
       if (stored.hhmmFormat !== undefined) CFG.hhmmFormat = stored.hhmmFormat;
+      if (stored.personData && typeof stored.personData === 'object') personData = stored.personData;
+      // Sprzątanie po starym globalnym etacie — nie jest już używany (standard = stała 8h).
+      chrome.storage.local.remove('hoursPerDay');
+      chrome.storage.local.remove('correctionHours');
     } catch (_) {}
 
     if (isTimesheetPage() || isVacationPage()) startPolling();

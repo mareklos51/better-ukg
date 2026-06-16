@@ -4,8 +4,8 @@ Rozszerzenie przeglądarki **Microsoft Edge / Chrome / Firefox** dla systemu **U
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.5.3-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.3-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-firefox.xpi) |
+| **Edge / Chrome** | [better-ukg-1.5.4-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.4/better-ukg-1.5.4-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.5.4-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.4/better-ukg-1.5.4-firefox.xpi) |
 
 ---
 
@@ -73,8 +73,8 @@ Pobierz paczkę odpowiednią dla swojej przeglądarki:
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.5.3-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.3-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-firefox.xpi) |
+| **Edge / Chrome** | [better-ukg-1.5.4-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.4/better-ukg-1.5.4-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.5.4-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.4/better-ukg-1.5.4-firefox.xpi) |
 
 Rozpakuj archiwum w dowolnym folderze (np. na pulpicie)
 
@@ -114,7 +114,7 @@ Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mie�
 
 ### Krok 1 – Pobierz plik
 
-Pobierz plik [better-ukg-1.5.3-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.3/better-ukg-1.5.3-firefox.xpi)
+Pobierz plik [better-ukg-1.5.4-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.4/better-ukg-1.5.4-firefox.xpi)
 
 ### Krok 2 – Zainstaluj
 
@@ -128,6 +128,10 @@ Gotowe — wtyczka jest zainstalowana na stałe i nie wymaga trybu dewelopera.
 
 ### v1.5.4
 
+- **Pamięć ustawień per osoba** — etat i korekta zapamiętywane są dla konkretnej osoby (po numerze pracowniczym z nagłówka timesheeta, np. `(5978)`; we własnym widoku jako `self`). Menedżer przełączając się między timesheetami widzi i ustawia indywidualne wartości każdego pracownika — wprost na banerze.
+  - **Etat** (norma h/dzień) — trwały per osoba, ten sam w każdym miesiącu. Standard 8h; wyjątki (np. 7/8) ustawiasz na banerze, znacznik `💾` pokazuje zapamiętany własny etat.
+  - **Korekta** — per osoba **i miesiąc**, świeża w nowym miesiącu (poprzednie miesiące zachowane).
+  - Pole *Norma godzin/dzień* usunięte z menu wtyczki — standardem jest stałe 8h, a etat ustawia się indywidualnie. (Wcześniej globalna norma narzucała się wszystkim pracownikom bez własnego ustawienia.)
 - **Podświetlanie niedokończonych dni** — przeszłe dni robocze bez żadnych godzin w *Raw Total* (np. *Clock In* bez *Clock Out*, albo całkiem pusty dzień) są delikatnie zaznaczane czerwonym tłem. Dni z wpisem pracy lub absencji są pomijane, podobnie dzień bieżący i weekendy.
 - **Ujemna korekta** — wartość ujemnej korekty ręcznej w banerze pokazywana ze znakiem `−` i na czerwono.
 

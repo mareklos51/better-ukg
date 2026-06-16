@@ -3,9 +3,15 @@
 ## [1.5.4] – 2026-06-16
 
 ### Dodano
+- **Pamięć ustawień per osoba** – etat i korekta są teraz zapamiętywane dla konkretnej osoby na podstawie numeru pracowniczego z nagłówka timesheeta (np. `(5978)`); we własnym widoku pod kluczem `self`. Menedżer „skacząc" między timesheetami widzi i ustawia indywidualne wartości każdego pracownika.
+  - **Etat** (norma h/dzień) – trwały per osoba, obowiązuje w każdym miesiącu. Standard to 8h; wyjątki (np. 7/8) ustawiasz wprost na banerze danego timesheeta. Znacznik `💾` informuje o zapamiętanym własnym etacie.
+  - **Korekta** – zapamiętywana per osoba **i miesiąc**; świeża (0) w nowym miesiącu, poprzednie miesiące zachowane. Edytowalna wprost na banerze.
+  - Baner pokazuje, dla kogo zapisywane są ustawienia (👤 imię i nazwisko / „Twój timesheet").
+  - Dane przechowywane lokalnie w `chrome.storage.local` (klucz `personData`).
 - **Podświetlanie niedokończonych dni** – przeszłe dni robocze (Pn–Pt) bez żadnych godzin w kolumnie *Raw Total* są delikatnie zaznaczane czerwonym tłem. Wyłapuje to typowy błąd: wpisany *Clock In* bez *Clock Out* (Raw Total pusty) oraz całkiem puste dni robocze. Dni z dowolnym wpisem (praca lub absencja: Holiday, Vacation, Blood Donation itp.) mają Raw Total > 0, więc nie są zaznaczane. Dzień bieżący i weekendy są pomijane.
 
 ### Zmieniono
+- **Etat zamiast globalnej normy dziennej** – pole *Norma godzin/dzień* usunięte z menu wtyczki. Standardowy etat to teraz stała 8h, a wyjątki ustawia się indywidualnie per osoba na banerze. Wcześniej globalna norma była domyślną dla wszystkich, przez co zmiana na np. 7h błędnie narzucała 7h każdemu pracownikowi bez własnego ustawienia.
 - **Ujemna korekta w banerze** – wartość ujemnej korekty ręcznej jest teraz pokazywana ze znakiem `−` i czerwonym kolorem (wcześniej bez znaku).
 
 ## [1.5.3] – 2026-06-08
