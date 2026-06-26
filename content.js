@@ -2,12 +2,12 @@
  * Better UKG – content script
  * Strona docelowa: *.saashr.com (UKG Pro)
  *
- * Algorytm:
+ * Algorytm (uproszczony — pełna formuła w calculate()):
  *  1. Pobierz zakres okresu z nagłówka timesheeta (span.c-timesheet-header__date-carousel-title)
- *  2. Zsumuj "Calc. Total" ze wszystkich wierszy-podsumowań dnia (tr[data-group-date].m-footer, TD[5])
- *  3. Oblicz minione dni robocze (od początku okresu do dziś)
- *  4. Saldo = przepracowane − minione_dni × hoursPerDay
- *  5. Wstrzyknij baner fixed na górę strony
+ *  2. Zsumuj "Calc. Total" z m-footer ≤ dziś (tr[data-group-date].m-footer, TD[5])
+ *  3. Odejmij Overtime Payout i TOIL; wykryj Holiday/absencje (anulują normę dnia)
+ *  4. Saldo = przepracowane(−OT−TOIL) − norma_minionych_dni + korekty (TOIL/absencje/ręczna)
+ *  5. Wstrzyknij baner + dzienne widgety; podświetl niedokończone dni
  */
 
 (function () {
@@ -117,17 +117,35 @@
     return count;
   }
 
+  /**
+   * Parsuje pojedynczą angielską datę "May 01, 2026" (też "September 1 2026") → Date
+   * (lokalna północ). Jawne parsowanie zamiast new Date(string): new Date() na takim
+   * formacie jest zależne od implementacji/locale silnika JS, a tu chcemy wyniku
+   * deterministycznego i spójnego z parseDateAttr()/rowToDate() (też new Date(rok, mc, dz)).
+   * Zakłada angielskie nazwy miesięcy (UKG renderuje nagłówek po angielsku).
+   */
+  function parseEnglishDate(str) {
+    const m = (str || '').trim().match(/^([A-Za-z]+)\s+(\d{1,2}),?\s*(\d{4})$/);
+    if (!m) return null;
+    const abbr  = m[1].slice(0, 3);   // pełna nazwa i skrót dzielą 3 pierwsze litery (September→Sep, June→Jun)
+    const month = MONTH_ABBR[abbr.charAt(0).toUpperCase() + abbr.slice(1).toLowerCase()];
+    const day   = parseInt(m[2], 10);
+    const year  = parseInt(m[3], 10);
+    if (month === undefined || isNaN(day) || isNaN(year)) return null;
+    const d = new Date(year, month, day);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
   /** Parsuje "May 01, 2026 - May 31, 2026" → { start: Date, end: Date } */
   function parsePeriodDates(text) {
     const m = (text || '').match(
       /([A-Za-z]+ \d{1,2},?\s*\d{4})\s*[-–—]\s*([A-Za-z]+ \d{1,2},?\s*\d{4})/
     );
     if (!m) return null;
-    const start = new Date(m[1]);
-    const end   = new Date(m[2]);
-    if (isNaN(start) || isNaN(end)) return null;
-    start.setHours(0, 0, 0, 0);
-    end.setHours(0, 0, 0, 0);
+    const start = parseEnglishDate(m[1]);
+    const end   = parseEnglishDate(m[2]);
+    if (!start || !end) return null;
     return { start, end };
   }
 
@@ -677,7 +695,11 @@
     const etatInput = banner.querySelector('.ftc-etat-input');
     if (etatInput) {
       etatInput.addEventListener('change', () => {
-        const hours = parseFloat(etatInput.value);
+        let hours = parseFloat(etatInput.value);
+        if (!isNaN(hours)) {
+          hours = Math.max(0, Math.min(24, hours));  // etat w zakresie [0,24]h — ujemny dałby ujemną normę
+          etatInput.value = hours;
+        }
         setPersonHoursPerDay(currentPerson.key, currentPerson.name, isNaN(hours) ? null : hours);
         tryCalculateAndShow();
       });
@@ -728,17 +750,13 @@
     // Usuń stare widgety
     document.querySelectorAll('.ftc-daily-widget').forEach((el) => el.remove());
 
-    // Daty z wpisem Time Off innym niż TOIL (Holiday, Vacation itp.) — te dni pomijamy w widgecie.
-    // TOIL jest traktowany jak OT Payout: odejmujemy jego godziny per-dzień zamiast pomijać cały dzień.
-    const timeOffDates = new Set();
-    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
-      const input = row.querySelector('input[aria-label="Time Off"]');
-      if (!input) return;
-      const val = input.value || input.getAttribute('value') || '';
-      if (!val.trim()) return;
-      if (val.toLowerCase().includes('time off in lieu')) return; // TOIL: obsługiwany osobno poniżej
-      timeOffDates.add(row.getAttribute('data-group-date'));
-    });
+    // UWAGA: NIE pomijamy dni z absencją (Childcare PTO, Vacation, Holiday, Blood Donation, …).
+    // UKG wlicza godziny absencji do Calc. Total dnia (np. 6.70h pracy + 0.33h Childcare PTO
+    // = footer 07:02), więc traktujemy każdy miniony dzień roboczy tak samo jak baner:
+    // delta = footer − norma. Dni z absencją "na cały dzień" (footer = 0h) i tak są pomijane
+    // niżej (rawMinutes === 0), co odpowiada anulowaniu normy w calculate() (absenceNormAdjust).
+    // Pominięcie absencji z footerem > 0 (jak było wcześniej) rozjeżdżało skumulowane ∑ z saldem
+    // banera dla dni częściowej absencji. TOIL i OT Payout nadal odejmujemy per-dzień (poniżej).
 
     // TOIL per dzień — entry-level z input[aria-label="Raw Total"] (wiersze Time Off
     // nie mają decimal TDs jak wpisy pracy, tylko input Raw Total)
@@ -794,8 +812,6 @@
     let runningBalance = 0;
 
     footerRows.forEach(({ row, parsed, dateAttr }) => {
-      if (timeOffDates.has(dateAttr)) return;
-
       const rowDate = new Date(today.getFullYear(), parsed.month, parsed.day);
       rowDate.setHours(0, 0, 0, 0);
       if (rowDate > today) return;
@@ -1135,6 +1151,7 @@
   window.addEventListener('hashchange', () => {
     document.getElementById(BANNER_ID)?.remove();
     clearInterval(pollTimer);
+    clearTimeout(debounceTimer);   // anuluj wiszący debounce MutationObservera sprzed nawigacji
     if (isTimesheetPage() || isVacationPage()) startPolling();
   });
 

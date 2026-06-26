@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.5] – 2026-06-26
+
+### Naprawiono
+- **Dzienne widgety nie liczyły absencji z godzinami w sumie dnia** – małe widgety pod sumą dnia (delta dnia + skumulowane `∑`) pomijały całkowicie każdy dzień z wpisem Time Off innym niż TOIL (Childcare PTO, Vacation, Holiday, Blood Donation itp.). Gdy taki dzień miał godziny doliczone do *Calc. Total* (UKG wlicza godziny absencji do sumy dnia – np. częściowy Childcare PTO: 6.70h pracy + 0.33h PTO = `07:02`), widget nie wyświetlał delty, a skumulowane `∑` rozjeżdżało się z saldem banera (dla problematycznego timesheeta: baner `−00:23`, a widgety `+01:35`). Pełnodniowe Vacation/Holiday (suma = etat) dawały netto zero i maskowały błąd. Teraz `injectDailyFlexWidgets()` liczy każdy miniony dzień roboczy po sumie dnia (`delta = suma − etat`) – tak samo jak `calculate()`. Dni absencji „na cały dzień" z zerem godzin nadal są pomijane (warunek `rawMinutes === 0`), co odpowiada anulowaniu normy w banerze (`absenceNormAdjust`). TOIL i Overtime Payout dalej odejmowane per-dzień.
+- **Wiszący debounce po zmianie strony** – przy nawigacji w SPA UKG (`hashchange`) anulowany jest teraz oczekujący timer MutationObservera (`clearTimeout(debounceTimer)`), żeby kalkulacja ze starej strony nie odpaliła się już po przejściu na inny widok.
+
+### Zmieniono
+- **Deterministyczne parsowanie dat okresu** – zakres z nagłówka („May 01, 2026 - May 31, 2026") jest parsowany jawnie (`parseEnglishDate`) zamiast przez `new Date(string)`, którego wynik bywa zależny od locale/silnika przeglądarki. Spójne z resztą parsowania dat w wtyczce.
+- **Etat ograniczony do zakresu 0–24 h** – pole etatu na banerze przycina wpisaną wartość do sensownego zakresu (ujemny etat dawał ujemną normę).
+
 ## [1.5.4] – 2026-06-16
 
 ### Dodano

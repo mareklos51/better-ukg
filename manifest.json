@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Better UKG",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "browser_specific_settings": {
     "gecko": {
-      "id": "better-ukg@gdm-gdansk",
+      "id": "better-ukg@mareklos51",
       "strict_min_version": "109.0",
       "data_collection_permissions": {
-        "required": [],
+        "required": ["none"],
         "optional": []
       }
     }
