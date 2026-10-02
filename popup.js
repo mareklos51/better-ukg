@@ -25,14 +25,12 @@ function hide(id) { document.getElementById(id).style.display = 'none'; }
 
 async function init() {
   // Wczytaj ustawienia
-  const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays', 'hhmmFormat']);
+  const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays']);
   const manualNorm      = stored.manualNorm     ?? 0;
   const vacationInDays  = stored.vacationInDays  ?? true;
-  const hhmmFormat      = stored.hhmmFormat     ?? true;
 
   document.getElementById('manual-norm').value        = manualNorm;
   document.getElementById('vacation-in-days').checked = vacationInDays;
-  document.getElementById('hhmm-format').checked      = hhmmFormat;
 
   // Pobierz dane z aktywnej karty (content.js)
   let tab;
@@ -155,23 +153,11 @@ document.getElementById('vacation-in-days').addEventListener('change', async (e)
   }
 });
 
-document.getElementById('hhmm-format').addEventListener('change', async (e) => {
-  const hhmmFormat = e.target.checked;
-  await chrome.storage.local.set({ hhmmFormat });
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) {
-    try {
-      await chrome.tabs.sendMessage(tab.id, { action: 'settingsUpdated', hhmmFormat });
-    } catch (_) {}
-  }
-});
-
 document.getElementById('save-btn').addEventListener('click', async () => {
   const manualNorm      = parseFloat(document.getElementById('manual-norm').value)      || 0;
   const vacationInDays  = document.getElementById('vacation-in-days').checked;
-  const hhmmFormat      = document.getElementById('hhmm-format').checked;
 
-  await chrome.storage.local.set({ manualNorm, vacationInDays, hhmmFormat });
+  await chrome.storage.local.set({ manualNorm, vacationInDays });
 
   // Poinformuj content.js o nowych ustawieniach i odśwież widok
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -181,7 +167,6 @@ document.getElementById('save-btn').addEventListener('click', async () => {
         action: 'settingsUpdated',
         manualNorm,
         vacationInDays,
-        hhmmFormat,
       });
     } catch (_) {}
   }

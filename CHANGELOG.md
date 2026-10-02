@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0] – 2026-10-02
+
+### Naprawiono
+- **Saldo flex przy nowym formacie godzin UKG** – UKG przeszło z godzin dziesiętnych na `HH:MM`: suma dnia w `m-footer` to teraz `08:16 hrs` (było `8.27 hrs`), a `Raw Total`/`Calc. Total` wpisu to `08:16` (było `8.27`). Parser obsługiwał tylko format dziesiętny, więc każda suma dnia dawała 0 min (baner: `Przepracowano: 00:00h`, saldo = −cała norma), a `parseFloat("08:16")` obcinało Raw Total do 8h (TOIL, wykrywanie niedokończonych dni, praca bez godzin w kontroli odpoczynku). Wszystkie odczyty godzin idą teraz przez wspólny `parseHoursValue()` / `readRawTotalMinutes()`, obsługujący oba formaty (z sufiksem `hrs` i bez). Detekcja kolumny Calc. Total w wierszach *Overtime Payout* akceptuje `^\d+:\d{2}$` obok `^\d+\.\d+$`.
+
+### Usunięto
+- **Przełącznik „Sumy godzin w formacie HH:MM"** (`CFG.hhmmFormat`, `convertTimesheetTotalsToHHMM()` / `revertTimesheetTotals()`) – UKG wyświetla `HH:MM` natywnie. `init()` kasuje stary klucz `hhmmFormat` z `chrome.storage.local`.
+
 ## [1.5.7] – 2026-08-27
 
 ### Dodano

@@ -23,7 +23,6 @@
   let CFG = {
     manualNorm: 0,        // ręczna norma miesiąca (godziny); 0 = auto
     vacationInDays: true, // wyświetlaj salda urlopowe w dniach (zamiast godzin)
-    hhmmFormat: true,     // wyświetlaj sumy godzin w formacie HH:MM zamiast X.XX hrs
   };
 
   // ─── Pamięć per osoba ────────────────────────────────────────────────────────
@@ -83,10 +82,34 @@
 
   // ─── Parsowanie i formatowanie ────────────────────────────────────────────────
 
-  /** "8.02 hrs" → 481 min */
+  /**
+   * Wzorzec liczby godzin w obu formatach UKG (sufiks " hrs" opcjonalny):
+   *   dziesiętny: "8.02", "8.02 hrs"  (do ~IX 2026)
+   *   HH:MM:      "08:01", "08:01 hrs" (UKG przeszło na HH:MM, zrzut timesheet-new-hours.html)
+   */
+  const HOURS_VALUE_RE = /^(-?)(?:(\d+):(\d{2})|(\d+(?:\.\d+)?))(?:\s*(?:hrs?|hours))?$/i;
+
+  /** "8.02 hrs" / "08:01 hrs" / "08:01" / "8.02" → minuty; NaN gdy tekst nie jest liczbą godzin */
+  function parseHoursValue(text) {
+    const m = (text || '').trim().match(HOURS_VALUE_RE);
+    if (!m) return NaN;
+    const mins = m[2] !== undefined
+      ? parseInt(m[2], 10) * 60 + parseInt(m[3], 10)
+      : Math.round(parseFloat(m[4]) * 60);
+    return m[1] ? -mins : mins;
+  }
+
+  /** "8.02 hrs" → 481 min, "08:01 hrs" → 481 min; 0 gdy nie da się sparsować */
   function parseHoursToMinutes(text) {
-    const m = (text || '').trim().match(/^([\d.]+)\s*hrs?$/i);
-    return m ? Math.round(parseFloat(m[1]) * 60) : 0;
+    const mins = parseHoursValue(text);
+    return isNaN(mins) ? 0 : mins;
+  }
+
+  /** Minuty z input[aria-label="Raw Total"] wiersza wpisu (0 gdy brak/puste) */
+  function readRawTotalMinutes(row) {
+    const input = row.querySelector('input[aria-label="Raw Total"]');
+    if (!input) return 0;
+    return parseHoursToMinutes(input.value || input.getAttribute('value') || '');
   }
 
   /** 481 min → "+08:01" lub "-00:45" */
@@ -105,13 +128,10 @@
   function fmt2(n) { return String(n).padStart(2, '0'); }
 
   /**
-   * Zwraca oryginalny tekst komórki: jeśli została przekonwertowana do HH:MM,
-   * atrybut data-ftc-hhmm przechowuje oryginalną wartość "X.XX hrs".
-   * Jeśli komórka zawiera elementy wstrzyknięte przez wtyczkę (widget delty,
-   * ostrzeżenie o odpoczynku), pomija je przy odczycie textContent.
+   * Zwraca oryginalny tekst komórki UKG. Jeśli komórka zawiera elementy wstrzyknięte
+   * przez wtyczkę (widget delty, ostrzeżenie o odpoczynku), pomija je przy odczycie textContent.
    */
   function getOriginalText(el) {
-    if (el.hasAttribute('data-ftc-hhmm')) return el.getAttribute('data-ftc-hhmm');
     if (!el.querySelector(INJECTED_CELL_SELECTOR)) return el.textContent;
     const clone = el.cloneNode(true);
     clone.querySelectorAll(INJECTED_CELL_SELECTOR).forEach((n) => n.remove());
@@ -382,9 +402,9 @@
    *    UKG renderuje pole Activity jako kontrolkę z input-em, którego atrybut
    *    i właściwość .value zawiera nazwę wybranej aktywności.
    *
-   * 2. CALC. TOTAL: w wierszach wpisów godziny są liczbami dziesiętnymi ("8.02",
-   *    nie "8.02 hrs"). RawTotal i CalcTotal to jedyne TD z czystą liczbą dziesiętną.
-   *    CalcTotal to zawsze DRUGI taki TD (RawTotal jest pierwszy).
+   * 2. CALC. TOTAL: w wierszach wpisów godziny są gołą liczbą bez " hrs" ("8.02"
+   *    albo — w nowym UKG — "08:01"). RawTotal i CalcTotal to jedyne TD z samą liczbą
+   *    godzin. CalcTotal to zawsze DRUGI taki TD (RawTotal jest pierwszy).
    *
    * Jedno źródło prawdy dla salda (calculate), widgetów dziennych i alertu nadgodzin.
    */
@@ -403,14 +423,14 @@
       const tds = [...row.querySelectorAll('td')];
       const decimalTds = tds.filter((td) => {
         const t = td.textContent.replace(/\s+/g, ' ').trim();
-        return /^\d+\.\d+$/.test(t);
+        return /^(?:\d+\.\d+|\d+:\d{2})$/.test(t);
       });
 
       // decimalTds[0] = RawTotal, decimalTds[1] = CalcTotal
       const calcTd = decimalTds[1] ?? decimalTds[0];
       if (!calcTd) return;
 
-      const mins = Math.round(parseFloat(calcTd.textContent.replace(/\s+/g, '')) * 60);
+      const mins = parseHoursValue(calcTd.textContent.replace(/\s+/g, ''));
       if (isNaN(mins)) return;
       const dateAttr = row.getAttribute('data-group-date');
       byDate[dateAttr] = (byDate[dateAttr] || 0) + mins;
@@ -500,13 +520,8 @@
       const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
       if (!val.toLowerCase().includes('time off in lieu')) return;
 
-      const rawTotalInput = row.querySelector('input[aria-label="Raw Total"]');
-      const hoursStr = rawTotalInput
-        ? (rawTotalInput.value || rawTotalInput.getAttribute('value') || '')
-        : '';
-      const hours = parseFloat(hoursStr);
-      if (!isNaN(hours) && hours > 0) {
-        const mins = Math.round(hours * 60);
+      const mins = readRawTotalMinutes(row);
+      if (mins > 0) {
         toilMinutes += mins;
         const dateAttr = row.getAttribute('data-group-date');
         toilByDateCalc[dateAttr] = (toilByDateCalc[dateAttr] || 0) + mins;
@@ -814,37 +829,6 @@
     }
   }
 
-  // ─── Konwersja kolumn Raw Total / Calc. Total do formatu HH:MM ───────────────
-
-  /**
-   * Zamienia wartości "X.XX hrs" na "HH:MM" w wierszach podsumowujących (m-footer).
-   * Oryginalna wartość jest zachowana w atrybucie data-ftc-hhmm, żeby calculate()
-   * mogło ją dalej odczytywać przez getOriginalText().
-   */
-  function convertTimesheetTotalsToHHMM() {
-    if (!isTimesheetPage()) return;
-    document.querySelectorAll('tr[data-group-date].m-footer').forEach((row) => {
-      row.querySelectorAll('td').forEach((td) => {
-        if (td.hasAttribute('data-ftc-hhmm')) return;
-        // Czytaj wartość źródłową — komórka może już zawierać wstrzyknięty widget delty
-        // i/lub ostrzeżenie o odpoczynku, które nie mogą zabrudzić parsowanej liczby.
-        const text = getOriginalText(td).trim();
-        const m = text.match(/^([\d.]+)\s*hrs?$/i);
-        if (!m) return;
-        const totalMin = Math.round(parseFloat(m[1]) * 60);
-        td.setAttribute('data-ftc-hhmm', text);
-        td.textContent = fmt2(Math.floor(totalMin / 60)) + ':' + fmt2(totalMin % 60);
-      });
-    });
-  }
-
-  function revertTimesheetTotals() {
-    document.querySelectorAll('tr[data-group-date].m-footer td[data-ftc-hhmm]').forEach((td) => {
-      td.textContent = td.getAttribute('data-ftc-hhmm');
-      td.removeAttribute('data-ftc-hhmm');
-    });
-  }
-
   // ─── Dzienny widget flex pod Calc. Total ──────────────────────────────────────
 
   /**
@@ -875,13 +859,9 @@
       const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
       if (!val.toLowerCase().includes('time off in lieu')) return;
       const dateAttr = row.getAttribute('data-group-date');
-      const rawTotalInput = row.querySelector('input[aria-label="Raw Total"]');
-      const hoursStr = rawTotalInput
-        ? (rawTotalInput.value || rawTotalInput.getAttribute('value') || '')
-        : '';
-      const hours = parseFloat(hoursStr);
-      if (!isNaN(hours) && hours > 0) {
-        toilByDate[dateAttr] = (toilByDate[dateAttr] || 0) + Math.round(hours * 60);
+      const mins = readRawTotalMinutes(row);
+      if (mins > 0) {
+        toilByDate[dateAttr] = (toilByDate[dateAttr] || 0) + mins;
       }
     });
 
@@ -992,12 +972,7 @@
       if (!entryRowsByDate[dateAttr]) entryRowsByDate[dateAttr] = [];
       entryRowsByDate[dateAttr].push(row);
 
-      const rawInput = row.querySelector('input[aria-label="Raw Total"]');
-      const rawStr = rawInput
-        ? (rawInput.value || rawInput.getAttribute('value') || '').trim()
-        : '';
-      const rawNum = parseFloat(rawStr);
-      if (!isNaN(rawNum) && rawNum > 0) hasRawTotalByDate[dateAttr] = true;
+      if (readRawTotalMinutes(row) > 0) hasRawTotalByDate[dateAttr] = true;
     });
 
     // Wiersze-nagłówki pustych dni (brak data-shift-id, brak m-footer).
@@ -1118,11 +1093,7 @@
       }
 
       // Brak godzin zegarowych, ale wpisane Raw Hours → praca o nieznanych godzinach.
-      const rawInput = row.querySelector('input[aria-label="Raw Total"]');
-      const rawHours = parseFloat(
-        rawInput ? (rawInput.value || rawInput.getAttribute('value') || '') : ''
-      );
-      if (!isNaN(rawHours) && rawHours > 0) day.hasOpaqueWork = true;
+      if (readRawTotalMinutes(row) > 0) day.hasOpaqueWork = true;
     });
 
     return days;
@@ -1657,8 +1628,6 @@
     const data = calculate();
     if (data) {
       injectBanner(data);
-      if (CFG.hhmmFormat) convertTimesheetTotalsToHHMM();
-      else revertTimesheetTotals();
       injectDailyFlexWidgets();
       injectRestWarnings();      // po widgetach — badge ląduje pod deltą w tej samej komórce
       injectWeeklyRestWarnings();// j.w. — 35h odpoczynku tygodniowego (weekend)
@@ -1725,10 +1694,6 @@
     if (msg.action === 'settingsUpdated') {
       if (msg.manualNorm !== undefined) CFG.manualNorm = msg.manualNorm;
       if (msg.vacationInDays !== undefined) CFG.vacationInDays = msg.vacationInDays;
-      if (msg.hhmmFormat !== undefined) {
-        CFG.hhmmFormat = msg.hhmmFormat;
-        if (!CFG.hhmmFormat) revertTimesheetTotals();
-      }
       if (isVacationPage()) convertVacationBalancesToDays();
       tryCalculateAndShow();
     }
@@ -1741,14 +1706,15 @@
   async function init() {
     // Wczytaj ustawienia z chrome.storage
     try {
-      const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays', 'hhmmFormat', 'personData']);
+      const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays', 'personData']);
       if (stored.manualNorm  !== undefined) CFG.manualNorm  = stored.manualNorm;
       if (stored.vacationInDays !== undefined) CFG.vacationInDays = stored.vacationInDays;
-      if (stored.hhmmFormat !== undefined) CFG.hhmmFormat = stored.hhmmFormat;
       if (stored.personData && typeof stored.personData === 'object') personData = stored.personData;
       // Sprzątanie po starym globalnym etacie — nie jest już używany (standard = stała 8h).
       chrome.storage.local.remove('hoursPerDay');
       chrome.storage.local.remove('correctionHours');
+      // UKG samo pokazuje HH:MM (od v1.6.0) — przełącznik formatu usunięty.
+      chrome.storage.local.remove('hhmmFormat');
     } catch (_) {}
 
     if (isTimesheetPage() || isVacationPage()) startPolling();

@@ -4,8 +4,8 @@ Rozszerzenie przeglądarki **Microsoft Edge / Chrome / Firefox** dla systemu **U
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.5.7-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.7/better-ukg-1.5.7-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.7-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.7/better-ukg-1.5.7-firefox.xpi) |
+| **Edge / Chrome** | [better-ukg-1.6.0-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.0/better-ukg-1.6.0-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.6.0-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.0/better-ukg-1.6.0-firefox.xpi) |
 
 ---
 
@@ -23,10 +23,6 @@ Wtyczka odczytuje dane bezpośrednio z timesheeta i oblicza:
 - **Sugestia godziny wyjścia** — na ostatni dzień roboczy miesiąca, po wpisaniu godziny Clock In, baner automatycznie podpowiada o której wyjść, żeby wyzerować saldo flex
 
 ![Baner flex time na górze timesheeta](assets/flex-time-bar-timesheet.png)
-
-Sumy godzin w wierszach podsumowujących dzień są wyświetlane w formacie **HH:MM** zamiast domyślnego `X.XX hrs`:
-
-![Sumy godzin w formacie HH:MM](assets/time-in-hhmm-timesheet.png)
 
 ### Kontrola czasu pracy (Kodeks pracy)
 
@@ -88,8 +84,8 @@ Pobierz paczkę odpowiednią dla swojej przeglądarki:
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.5.7-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.5.7/better-ukg-1.5.7-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.5.7-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.7/better-ukg-1.5.7-firefox.xpi) |
+| **Edge / Chrome** | [better-ukg-1.6.0-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.0/better-ukg-1.6.0-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.6.0-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.0/better-ukg-1.6.0-firefox.xpi) |
 
 Rozpakuj archiwum w dowolnym folderze (np. na pulpicie)
 
@@ -129,7 +125,7 @@ Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mie�
 
 ### Krok 1 – Pobierz plik
 
-Pobierz plik [better-ukg-1.5.7-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.5.7/better-ukg-1.5.7-firefox.xpi)
+Pobierz plik [better-ukg-1.6.0-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.0/better-ukg-1.6.0-firefox.xpi)
 
 ### Krok 2 – Zainstaluj
 
@@ -140,6 +136,11 @@ Gotowe — wtyczka jest zainstalowana na stałe i nie wymaga trybu dewelopera.
 ---
 
 ## Historia wersji
+
+### v1.6.0
+
+- **Bugfix saldo flex przy nowym formacie godzin UKG** — UKG zaczęło wyświetlać godziny w formacie `HH:MM` (`08:16 hrs` zamiast `8.27 hrs`, w wierszach wpisów `08:16` zamiast `8.27`). Wtyczka czytała wtedy sumy dni jako 0h (baner pokazywał `Przepracowano: 00:00h` i saldo równe całej normie na minusie), a godziny TOIL i nadgodzin obcinała do pełnych godzin. Teraz godziny są czytane poprawnie w obu formatach.
+- **Usunięto przełącznik „Sumy godzin w formacie HH:MM"** — UKG samo pokazuje teraz godziny jako `HH:MM`, więc opcja w menu wtyczki stała się zbędna.
 
 ### v1.5.7
 
