@@ -23,6 +23,7 @@
   let CFG = {
     manualNorm: 0,        // ręczna norma miesiąca (godziny); 0 = auto
     vacationInDays: true, // wyświetlaj salda urlopowe w dniach (zamiast godzin)
+    time24h: true,        // Clock In/Out wpisywane i wyświetlane w formacie 24h (zamiast am/pm)
   };
 
   // ─── Pamięć per osoba ────────────────────────────────────────────────────────
@@ -1679,6 +1680,358 @@
     mutationObs.observe(document.body, { childList: true, subtree: true });
   }
 
+  // ─── Wpisywanie czasu w formacie 24h ──────────────────────────────────────────
+  //
+  // UKG pokazuje Clock In / Clock Out w formacie 12h z przyciskiem am/pm obok pola.
+  // Jedno przypadkowe kliknięcie w am/pm przesuwa godzinę o 12h. Wtyczka przykrywa
+  // każde takie pole (`input[data-mask-ampm]`) własnym polem 24h (`.ftc-t24`):
+  //   • wyświetlanie: wartość UKG + sufiks am/pm z aria-label → "HH:MM" 24h (parseClockInput)
+  //   • zapis: "14:30" → do pola UKG "02:30" (jak wpisane z klawiatury) + przycisk am/pm
+  //     klikany tylko wtedy, gdy UKG ma inny znacznik niż trzeba; na końcu weryfikacja
+  //     odczytem. Do serwera idzie więc dokładnie to, co UKG wysłałoby po ręcznym wpisie.
+  // Gdy zapis się nie powiedzie, pole 24h dostaje czerwoną ramkę i pokazuje wartość, która
+  // faktycznie jest w UKG. Oryginału z am/pm nigdy nie odsłaniamy, a fokus, który do niego
+  // trafi, przenosimy do pola 24h (redirectFocusToOverlay) — wpis zawsze idzie przez wtyczkę.
+
+  const TIME24_INPUT_SELECTOR = 'input[data-mask-ampm="true"]';
+  let time24Obs        = null;
+  let time24SyncQueued = false;
+  let time24Writing    = 0;      // >0 = wtyczka sama ustawia fokus w polu UKG (nie przekierowuj)
+
+  /** Znacznik 'am' / 'pm' z sufiksu aria-label pola UKG; null = pole nie jest w trybie 12h. */
+  function readAmPm(el) {
+    const m = (el.getAttribute('aria-label') || '').toLowerCase().match(/(am|pm)$/);
+    return m ? m[1] : null;
+  }
+
+  function formatClock24(mins) {
+    return fmt2(Math.floor(mins / 60)) + ':' + fmt2(mins % 60);
+  }
+
+  /**
+   * Tekst wpisany przez użytkownika → minuty od północy; '' → null (wyczyść pole);
+   * undefined, gdy tekst nie jest poprawną godziną.
+   * Akceptuje: "14:30", "14.30", "14,30", "1430", "930" (09:30), "9" (09:00), "14" (14:00).
+   */
+  function parseTime24Text(text) {
+    const t = (text || '').trim();
+    if (!t) return null;
+    let hh, mm;
+    let m = t.match(/^(\d{1,2})[:.,](\d{1,2})$/);
+    if (m) {
+      hh = parseInt(m[1], 10);
+      mm = parseInt(m[2], 10);
+    } else if ((m = t.match(/^\d{1,4}$/))) {
+      if (t.length <= 2) { hh = parseInt(t, 10); mm = 0; }
+      else { hh = parseInt(t.slice(0, -2), 10); mm = parseInt(t.slice(-2), 10); }
+    } else {
+      return undefined;
+    }
+    if (hh > 23 || mm > 59) return undefined;
+    return hh * 60 + mm;
+  }
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /** Wpisuje tekst do pola UKG tak, jak zrobiłby to użytkownik (maska + stan Reacta). */
+  function typeIntoUkgInput(orig, text) {
+    orig.focus();
+    orig.select();
+    // insertText generuje beforeinput/input jak prawdziwe pisanie — maska UKG go obsłuży.
+    let ok = false;
+    try { ok = document.execCommand('insertText', false, text); } catch (_) {}
+    if (!ok || orig.value !== text) {
+      // Fallback: ustawienie wartości + zdarzenie input. Z content scriptu (izolowany świat)
+      // `value` idzie wprost do natywnego settera, więc React widzi zmianę w onChange.
+      orig.value = text;
+      orig.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    orig.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  /**
+   * Aktualny element pola UKG dla danego pola 24h. React potrafi po edycji podmienić
+   * <input> (np. wiersz pusty → wypełniony) — wtedy stara referencja jest odłączona od
+   * DOM i klikanie „jej" przycisku am/pm nic nie daje. Szukamy więc zawsze na nowo w hoście.
+   */
+  function resolveUkgInput(overlay) {
+    const prev = overlay._ftcOrig;
+    if (prev?.isConnected) return prev;
+    const host = overlay.parentElement;
+    const fresh = host?.isConnected ? host.querySelector(TIME24_INPUT_SELECTOR) : null;
+    if (fresh) overlay._ftcOrig = fresh;
+    return fresh;
+  }
+
+  function findAmPmButton(orig) {
+    const field = orig.closest('.c-form-control') || orig.parentElement?.parentElement;
+    return field?.querySelector('button.c-time-input-ampm-button') || null;
+  }
+
+  /**
+   * Przełącza am/pm na `want`. Nie wiemy, na które zdarzenie reaguje przycisk UKG
+   * (click / mousedown / klawiatura), więc próbujemy kolejnych sposobów i PO KAŻDYM
+   * sprawdzamy aria-label — żaden sposób nie jest powtarzany, gdy znacznik już się zgadza
+   * (dwa przełączenia z rzędu cofnęłyby zmianę).
+   */
+  async function ensureAmPm(overlay, want) {
+    const strategies = [
+      (btn) => btn.click(),
+      (btn) => {
+        const o = { bubbles: true, cancelable: true, view: window, button: 0 };
+        btn.dispatchEvent(new PointerEvent('pointerdown', o));
+        btn.dispatchEvent(new MouseEvent('mousedown', o));
+        btn.dispatchEvent(new PointerEvent('pointerup', o));
+        btn.dispatchEvent(new MouseEvent('mouseup', o));
+      },
+      (btn) => {
+        btn.focus();
+        const o = { bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 };
+        btn.dispatchEvent(new KeyboardEvent('keydown', o));
+        btn.dispatchEvent(new KeyboardEvent('keyup', o));
+      },
+      (_btn, orig) => {
+        // Maski czasu często przełączają am/pm klawiszem „a" / „p" w polu.
+        orig.focus();
+        const k = want[0];
+        const o = { bubbles: true, cancelable: true, key: k, code: 'Key' + k.toUpperCase(), keyCode: k.toUpperCase().charCodeAt(0) };
+        orig.dispatchEvent(new KeyboardEvent('keydown', o));
+        orig.dispatchEvent(new KeyboardEvent('keypress', o));
+        orig.dispatchEvent(new KeyboardEvent('keyup', o));
+      },
+    ];
+    for (let i = 0; i < strategies.length; i++) {
+      const orig = resolveUkgInput(overlay);
+      if (!orig) return false;
+      if (readAmPm(orig) === want) return true;
+      const btn = findAmPmButton(orig);
+      if (!btn) return false;
+      strategies[i](btn, orig);
+      await sleep(80);
+    }
+    const orig = resolveUkgInput(overlay);
+    return !!orig && readAmPm(orig) === want;
+  }
+
+  /** Zapisuje godzinę (minuty od północy lub null = wyczyść) do pola UKG pod `overlay`. */
+  async function writeTimeToUkg(overlay, mins) {
+    let orig = resolveUkgInput(overlay);
+    if (!orig) return false;
+    if (mins === null) {
+      typeIntoUkgInput(orig, '');
+      orig.blur();
+      await sleep(60);
+      orig = resolveUkgInput(overlay);
+      return !!orig && (orig.value || '').trim() === '';
+    }
+    const want = mins >= 720 ? 'pm' : 'am';
+    const hh12 = Math.floor(mins / 60) % 12 || 12;
+    const text = fmt2(hh12) + ':' + fmt2(mins % 60);
+
+    typeIntoUkgInput(orig, text);
+    await sleep(40);
+    orig = resolveUkgInput(overlay);
+    if (orig && parseHoursValue(orig.value) !== parseHoursValue(text)) {
+      typeIntoUkgInput(orig, text.replace(':', ''));   // maska tylko na cyfry
+      await sleep(40);
+    }
+    await ensureAmPm(overlay, want);
+    orig = resolveUkgInput(overlay);
+    orig?.blur();                                        // UKG zatwierdza pole na blur
+    await sleep(120);
+    // UKG może po blurze sam „zgadnąć" am/pm (albo przebudować pole) — popraw jeszcze raz.
+    for (let i = 0; i < 2; i++) {
+      orig = resolveUkgInput(overlay);
+      if (!orig || parseClockInput(orig) === mins) break;
+      await ensureAmPm(overlay, want);
+      resolveUkgInput(overlay)?.blur();
+      await sleep(120);
+    }
+    orig = resolveUkgInput(overlay);
+    const got = orig ? parseClockInput(orig) : null;
+    return got === mins;
+  }
+
+  /** Synchronizuje widok pola 24h z oryginałem (pomija pole, które użytkownik właśnie edytuje). */
+  function refreshTime24Overlay(orig, overlay) {
+    const ro = orig.readOnly || orig.disabled;
+    overlay.readOnly = ro;
+    overlay.classList.toggle('ftc-t24--readonly', ro);
+    overlay.placeholder = orig.getAttribute('placeholder') || '';
+    if (document.activeElement === overlay || overlay.dataset.ftcBusy) return;
+    const mins = parseClockInput(orig);
+    const raw  = (orig.value || orig.getAttribute('value') || '').trim();
+    overlay.value = mins !== null ? formatClock24(mins) : raw;
+  }
+
+  function attachTime24Overlay(orig) {
+    const host = orig.closest('[data-test="form-control-field"]') || orig.parentElement;
+    if (!host) return;
+    let overlay = host.querySelector(':scope > .ftc-t24');
+    if (!overlay) {
+      overlay = document.createElement('input');
+      overlay.type = 'text';
+      overlay.className = 'ftc-t24';
+      overlay.autocomplete = 'off';
+      overlay.spellcheck = false;
+      overlay.inputMode = 'numeric';
+      overlay.maxLength = 5;
+      overlay.title = 'Format 24h (Better UKG), np. 07:30 albo 1630';
+      overlay.setAttribute('aria-label', (orig.getAttribute('aria-label') || '').replace(/(am|pm)$/i, '') + ' (24h)');
+      overlay._ftcOrig = orig;
+      bindTime24Overlay(overlay);
+      host.appendChild(overlay);
+    }
+    overlay._ftcOrig = orig;       // React mógł podmienić element inputu
+    host.classList.add('ftc-t24-host');
+    if (orig.tabIndex !== -1) {
+      orig.dataset.ftcTabindex = orig.getAttribute('tabindex') ?? '';
+      orig.tabIndex = -1;          // Tab ma trafiać w pole 24h, nie w ukryty oryginał
+    }
+    refreshTime24Overlay(orig, overlay);
+  }
+
+  function bindTime24Overlay(overlay) {
+    overlay.addEventListener('focus', () => {
+      overlay.classList.remove('ftc-t24--error');
+      overlay.select();
+    });
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); overlay.blur(); }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        overlay.dataset.ftcCancel = '1';
+        overlay.blur();
+      }
+    });
+    overlay.addEventListener('blur', async (e) => {
+      const orig = resolveUkgInput(overlay);
+      if (!orig) return;
+      if (overlay.dataset.ftcCancel) {
+        delete overlay.dataset.ftcCancel;
+        refreshTime24Overlay(orig, overlay);
+        return;
+      }
+      if (overlay.readOnly) return;
+      const parsed = parseTime24Text(overlay.value);
+      if (parsed === undefined) {
+        overlay.classList.add('ftc-t24--error');
+        overlay.title = 'Niepoprawna godzina — wpisz np. 07:30 albo 1630';
+        return;
+      }
+      overlay.title = 'Format 24h (Better UKG), np. 07:30 albo 1630';
+      const current = (orig.value || '').trim() ? parseClockInput(orig) : null;
+      if (parsed === current) { refreshTime24Overlay(orig, overlay); return; }
+
+      const nextFocus = e.relatedTarget;
+      overlay.dataset.ftcBusy = '1';
+      overlay.value = parsed === null ? '' : formatClock24(parsed);
+      let ok = false;
+      time24Writing++;
+      try { ok = await writeTimeToUkg(overlay, parsed); } catch (_) {}
+      finally { time24Writing--; }
+      delete overlay.dataset.ftcBusy;
+      if (nextFocus && nextFocus.isConnected) nextFocus.focus();
+
+      // Zawsze pokazuj to, co FAKTYCZNIE jest w UKG — nigdy wartość, którą chcieliśmy wpisać.
+      const actual = resolveUkgInput(overlay);
+      if (actual) refreshTime24Overlay(actual, overlay);
+      if (!ok) {
+        // Nie udało się — pole pokazuje (na czerwono) to, co faktycznie jest w UKG.
+        // Oryginału z am/pm NIE odsłaniamy: wpis w nim omijałby wtyczkę. Wystarczy wpisać ponownie.
+        overlay.classList.add('ftc-t24--error');
+        overlay.title = 'Better UKG nie zdołał ustawić tej godziny w UKG — pole pokazuje to, co jest w UKG. Wpisz godzinę ponownie.';
+      } else {
+        overlay.classList.remove('ftc-t24--error');
+      }
+    });
+  }
+
+  function syncTime24Inputs() {
+    time24SyncQueued = false;
+    if (!CFG.time24h || !isTimesheetPage()) return;
+    document.querySelectorAll(TIME24_INPUT_SELECTOR).forEach((orig) => {
+      if (readAmPm(orig) === null) return;   // brak sufiksu am/pm — UKG już jest w 24h
+      attachTime24Overlay(orig);
+    });
+    // Sieroty: pole 24h, którego oryginał zniknął z hosta (React przebudował komórkę)
+    document.querySelectorAll('.ftc-t24').forEach((ov) => {
+      if (ov.dataset.ftcBusy) return;          // trwa zapis — resolveUkgInput() sam znajdzie nowe pole
+      if (!ov._ftcOrig?.isConnected || !ov.parentElement?.contains(ov._ftcOrig)) ov.remove();
+    });
+  }
+
+  function queueTime24Sync() {
+    if (time24SyncQueued) return;
+    time24SyncQueued = true;
+    requestAnimationFrame(syncTime24Inputs);
+  }
+
+  function removeTime24Inputs() {
+    document.querySelectorAll('.ftc-t24').forEach((el) => el.remove());
+    document.querySelectorAll('.ftc-t24-host').forEach((el) =>
+      el.classList.remove('ftc-t24-host'));
+    document.querySelectorAll('[data-ftc-tabindex]').forEach((el) => {
+      const prev = el.dataset.ftcTabindex;
+      if (prev === '') el.removeAttribute('tabindex'); else el.setAttribute('tabindex', prev);
+      delete el.dataset.ftcTabindex;
+    });
+  }
+
+  /** Włącza/wyłącza tryb 24h zgodnie z CFG.time24h. */
+  function setupTime24() {
+    if (time24Obs) { time24Obs.disconnect(); time24Obs = null; }
+    if (!CFG.time24h) { removeTime24Inputs(); return; }
+    // Osobny observer: wartości/am-pm zmieniane przez Reacta to mutacje atrybutów,
+    // których główny observer (tylko childList) nie widzi.
+    time24Obs = new MutationObserver((mutations) => {
+      const relevant = mutations.some((mut) =>
+        mut.type === 'attributes'
+          ? mut.target.matches?.(TIME24_INPUT_SELECTOR)
+          : [...mut.addedNodes].some((n) => n.nodeType === Node.ELEMENT_NODE &&
+              !n.classList?.contains('ftc-t24') &&
+              (n.matches?.(TIME24_INPUT_SELECTOR) || n.querySelector?.(TIME24_INPUT_SELECTOR)))
+      );
+      if (relevant) queueTime24Sync();
+    });
+    time24Obs.observe(document.body, {
+      childList: true, subtree: true,
+      attributes: true, attributeFilter: ['value', 'aria-label', 'readonly', 'disabled'],
+    });
+    // Zmiana wartości przez Reacta nie zawsze rusza atrybut — złap też zdarzenie input.
+    queueTime24Sync();
+  }
+
+  document.addEventListener('input', (e) => {
+    if (CFG.time24h && e.target.matches?.(TIME24_INPUT_SELECTOR)) queueTime24Sync();
+  }, true);
+
+  /**
+   * Fokus w oryginalnym polu UKG (kliknięcie trafiło, zanim pole zostało przykryte, albo
+   * UKG samo ustawiło fokus po przebudowie wiersza) → przenieś go do pola 24h. Inaczej
+   * użytkownik pisze w polu 12h z pominięciem wtyczki i am/pm zostaje „stare".
+   * Pole readonly (UKG odblokowuje je dopiero po kliknięciu) — czekamy, aż się odblokuje.
+   */
+  function redirectFocusToOverlay(orig, attempt = 0) {
+    if (!CFG.time24h || time24Writing || document.activeElement !== orig) return;
+    if (readAmPm(orig) === null) return;
+    if (orig.readOnly || orig.disabled) {
+      if (attempt < 10) setTimeout(() => redirectFocusToOverlay(orig, attempt + 1), 50);
+      return;
+    }
+    attachTime24Overlay(orig);
+    const host = orig.closest('[data-test="form-control-field"]') || orig.parentElement;
+    const overlay = host?.querySelector(':scope > .ftc-t24');
+    if (!overlay) return;
+    overlay.focus();
+  }
+
+  document.addEventListener('focusin', (e) => {
+    if (CFG.time24h && !time24Writing && e.target.matches?.(TIME24_INPUT_SELECTOR)) {
+      redirectFocusToOverlay(e.target);
+    }
+  }, true);
+
   // ─── Komunikacja z popup ──────────────────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -1694,6 +2047,7 @@
     if (msg.action === 'settingsUpdated') {
       if (msg.manualNorm !== undefined) CFG.manualNorm = msg.manualNorm;
       if (msg.vacationInDays !== undefined) CFG.vacationInDays = msg.vacationInDays;
+      if (msg.time24h !== undefined) { CFG.time24h = msg.time24h; setupTime24(); }
       if (isVacationPage()) convertVacationBalancesToDays();
       tryCalculateAndShow();
     }
@@ -1706,9 +2060,10 @@
   async function init() {
     // Wczytaj ustawienia z chrome.storage
     try {
-      const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays', 'personData']);
+      const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays', 'time24h', 'personData']);
       if (stored.manualNorm  !== undefined) CFG.manualNorm  = stored.manualNorm;
       if (stored.vacationInDays !== undefined) CFG.vacationInDays = stored.vacationInDays;
+      if (stored.time24h !== undefined) CFG.time24h = stored.time24h;
       if (stored.personData && typeof stored.personData === 'object') personData = stored.personData;
       // Sprzątanie po starym globalnym etacie — nie jest już używany (standard = stała 8h).
       chrome.storage.local.remove('hoursPerDay');
@@ -1719,6 +2074,7 @@
 
     if (isTimesheetPage() || isVacationPage()) startPolling();
     setupMutationObserver();
+    setupTime24();
   }
 
   window.addEventListener('hashchange', () => {

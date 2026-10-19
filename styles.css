@@ -385,3 +385,49 @@ tr.ftc-incomplete-row:hover td {
   color: #e2e8f0;
 }
 
+
+/* ─── Pole czasu 24h przykrywające kontrolkę am/pm UKG ─── */
+.ftc-t24-host {
+  position: relative !important;
+}
+
+.ftc-t24 {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0 8px;
+  border: none;
+  border-radius: inherit;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.ftc-t24:focus {
+  box-shadow: inset 0 0 0 2px #3b82f6;
+}
+
+.ftc-t24--readonly {
+  background: transparent;
+  cursor: default;
+  pointer-events: none;   /* klik trafia w pole UKG, które je odblokowuje; fokus wraca do 24h */
+}
+
+/* Pole tylko do odczytu: tło przezroczyste, ale tekst oryginału (12h) musi zniknąć.
+   opacity (nie visibility) — oryginał ma dalej łapać kliknięcia, żeby UKG mogło go odblokować. */
+.ftc-t24-host:has(.ftc-t24--readonly) input:not(.ftc-t24),
+.ftc-t24-host:has(.ftc-t24--readonly) .c-time-input-ampm-button {
+  opacity: 0;
+}
+
+.ftc-t24--error {
+  box-shadow: inset 0 0 0 2px #dc2626 !important;
+  background: #fef2f2;
+}
+

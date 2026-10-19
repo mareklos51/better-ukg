@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.1] – 2026-10-15
+
+### Dodano
+- **Wpisywanie i wyświetlanie godzin Clock In / Clock Out w formacie 24h** – pola czasu UKG (`input[data-mask-ampm="true"]`) są w 12h z przyciskiem am/pm, którego przypadkowe kliknięcie przesuwa godzinę o 12h. Wtyczka przykrywa każde pole własnym polem 24h (`.ftc-t24`). Odczyt: wartość + sufiks am/pm z `aria-label` (`parseClockInput()`). Zapis (blur/Enter): `02:30` wpisywane do pola UKG jak z klawiatury (`execCommand('insertText')`, fallback `value` + `input`), przycisk am/pm klikany tylko przy niezgodności, na końcu weryfikacja odczytem. Nieudany zapis → czerwona ramka, a pole 24h pokazuje wartość faktycznie zapisaną w UKG (oryginalnej kontrolki am/pm nie odsłaniamy – wpis w niej omijałby wtyczkę). Akceptowane formaty: `14:30`, `14.30`, `1430`, `930`, `9`. Esc cofa edycję. Wiersze tylko do odczytu pokazują 24h bez edycji.
+- **Przełącznik „🕐 Godziny w formacie 24h"** w popupie (`CFG.time24h`, domyślnie włączony).
+
 ## [1.6.0] – 2026-10-02
 
 ### Naprawiono

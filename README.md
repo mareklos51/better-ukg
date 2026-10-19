@@ -4,8 +4,8 @@ Rozszerzenie przeglądarki **Microsoft Edge / Chrome / Firefox** dla systemu **U
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.6.0-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.0/better-ukg-1.6.0-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.6.0-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.0/better-ukg-1.6.0-firefox.xpi) |
+| **Edge / Chrome** | [better-ukg-1.6.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.1/better-ukg-1.6.1-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.6.1-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.1/better-ukg-1.6.1-firefox.xpi) |
 
 ---
 
@@ -84,8 +84,8 @@ Pobierz paczkę odpowiednią dla swojej przeglądarki:
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.6.0-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.0/better-ukg-1.6.0-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.6.0-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.0/better-ukg-1.6.0-firefox.xpi) |
+| **Edge / Chrome** | [better-ukg-1.6.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.1/better-ukg-1.6.1-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.6.1-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.1/better-ukg-1.6.1-firefox.xpi) |
 
 Rozpakuj archiwum w dowolnym folderze (np. na pulpicie)
 
@@ -125,7 +125,7 @@ Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mie�
 
 ### Krok 1 – Pobierz plik
 
-Pobierz plik [better-ukg-1.6.0-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.0/better-ukg-1.6.0-firefox.xpi)
+Pobierz plik [better-ukg-1.6.1-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.1/better-ukg-1.6.1-firefox.xpi)
 
 ### Krok 2 – Zainstaluj
 
@@ -136,6 +136,10 @@ Gotowe — wtyczka jest zainstalowana na stałe i nie wymaga trybu dewelopera.
 ---
 
 ## Historia wersji
+
+### v1.6.1
+
+- **Godziny Clock In / Clock Out w formacie 24h** — UKG pokazuje godziny w formacie 12h z przyciskiem am/pm, a jedno przypadkowe kliknięcie przesuwa godzinę o 12h. Wtyczka przykrywa te pola własnymi polami 24h: wpisujesz `16:15` (albo `1615`), a wtyczka sama ustawia w UKG `04:15 pm` i sprawdza, czy zapis się zgadza. Gdy coś pójdzie nie tak, pole dostaje czerwoną ramkę i pokazuje godzinę, która faktycznie zapisała się w UKG — wystarczy wpisać ją ponownie. Funkcję można wyłączyć w menu wtyczki (**🕐 Godziny w formacie 24h**).
 
 ### v1.6.0
 
