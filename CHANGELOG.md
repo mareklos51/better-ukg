@@ -4,6 +4,7 @@
 
 ### Naprawiono
 - **Fałszywy plus salda od święta w weekend** – UKG wpisuje godziny *Holiday* do sumy dnia (`m-footer`). W dzień roboczy 8h święta dokładnie znosi 8h normy, ale święto w weekend (np. niedziela 1 XI 2026, norma 0) dawało saldo **+8:00**, a przy etacie 7h każde święto +1:00. Nowe `collectHolidayExcessByDate()` odejmuje `max(0, Holiday − norma_dnia)` dla dni ≤ dziś – w `calculate()` i w `injectDailyFlexWidgets()` (ostatnie `∑` zgodne z banerem). Praca w dniu święta nadal liczy się na plus. Opis normy w banerze („X dni rob. + Y Holiday”) liczy tylko święta Pn–Pt.
+- **Nieaktualna wersja w stopce popupu** – stopka pokazywała na sztywno „v1.5”. Numer wersji jest teraz czytany z manifestu (`chrome.runtime.getManifest().version`).
 
 ## [1.6.1] – 2026-10-15
 

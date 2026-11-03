@@ -5,6 +5,13 @@
  * a ustawienia przechowuje w chrome.storage.local.
  */
 
+// ─── Wersja w stopce ─────────────────────────────────────────────────────────
+// Numer wersji z manifestu — stopka nie rozjedzie się przy kolejnym bumpie wersji.
+try {
+  const versionEl = document.getElementById('ftc-version');
+  if (versionEl) versionEl.textContent = chrome.runtime.getManifest().version;
+} catch (_) {}
+
 // ─── Pomocnicze ──────────────────────────────────────────────────────────────
 
 function formatMinutes(minutes) {
