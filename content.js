@@ -439,6 +439,46 @@
     return byDate;
   }
 
+  /**
+   * Nadwyżka godzin Holiday ponad normę dnia, per dzień: { dateAttr → minuty }.
+   *
+   * Święto ma być dla salda neutralne: zwalnia z normy dnia, ale nie jest „pracą na plus”.
+   * UKG wlicza godziny Holiday do Calc. Total, więc w zwykły dzień roboczy 8h święta
+   * dokładnie znosi 8h normy. Problem pojawia się, gdy godzin święta jest więcej niż normy:
+   *   • święto w weekend (np. niedziela 1 XI 2026): norma 0, Holiday 8h → fałszywe +8:00,
+   *   • etat < 8h (np. 7h): Holiday 8h → fałszywe +1:00.
+   * Zwracamy max(0, Holiday − norma_dnia) do odjęcia od przepracowanych. Praca w dniu
+   * święta (footer 10h = 8h Holiday + 2h) nadal daje +2:00.
+   *
+   * Godziny Holiday z Raw Total wpisu (entry-level, jak TOIL). Tylko dni ≤ upTo —
+   * przyszłych dni nie ma w sumie przepracowanych. Jedno źródło prawdy dla salda
+   * (calculate) i widgetów dziennych (injectDailyFlexWidgets).
+   */
+  function collectHolidayExcessByDate(toDate, upTo) {
+    const holidayByDate = {};
+    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
+      const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
+      if (!timeOffInput) return;
+      const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
+      if (!val.toLowerCase().includes('holiday')) return;
+      const mins = readRawTotalMinutes(row);
+      if (mins <= 0) return;
+      const dateAttr = row.getAttribute('data-group-date');
+      holidayByDate[dateAttr] = (holidayByDate[dateAttr] || 0) + mins;
+    });
+
+    const normPerDay = EFF.hoursPerDay * 60;
+    const excess = {};
+    for (const [dateAttr, mins] of Object.entries(holidayByDate)) {
+      const d = toDate(parseDateAttr(dateAttr));
+      if (!d || d > upTo) continue;
+      const dayNorm = (d.getDay() === 0 || d.getDay() === 6) ? 0 : normPerDay;
+      const over = mins - dayNorm;
+      if (over > 0) excess[dateAttr] = over;
+    }
+    return excess;
+  }
+
   function calculate() {
     // 1. Nagłówek okresu → zakres, "dziś" i konwerter dat wiersza
     const ctx = getPeriodContext();
@@ -486,6 +526,8 @@
 
     // 2c. Wykryj wpisy "Time Off: Holiday" — nie są dniami roboczymi, pokazujemy osobno.
     //     Skanujemy WSZYSTKIE wpisy miesiąca (nie tylko ≤ dziś) dla celów wyświetlania normy.
+    //     Do opisu normy liczą się tylko święta w dni robocze (Pn–Pt) — święto w niedzielę
+    //     (np. 1 XI 2026) nie zdejmuje żadnego dnia z normy miesiąca.
     const holidayDates = new Set();
     let holidayMinutes = 0;
     document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
@@ -495,6 +537,8 @@
       if (!val.includes('Holiday')) return;
       const dateAttr = row.getAttribute('data-group-date');
       if (holidayDates.has(dateAttr)) return;
+      const hDate = rowToDate(parseDateAttr(dateAttr));
+      if (!hDate || hDate.getDay() === 0 || hDate.getDay() === 6) return;
       holidayDates.add(dateAttr);
       const footerRow = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`);
       if (footerRow) {
@@ -505,6 +549,16 @@
       }
     });
     const holidayCount = holidayDates.size;
+
+    // 2c'. Nadwyżka Holiday ponad normę dnia — święto ma być NEUTRALNE dla salda.
+    //      UKG wpisuje godziny święta do Calc. Total, co w dzień roboczy dokładnie pokrywa
+    //      normę (8 − 8 = 0). Ale gdy święto wypada w weekend (norma 0) albo etat < 8h,
+    //      te godziny dawały fałszywy plus (niedziela 1 XI z Holiday 8h → saldo +8:00).
+    //      Odejmujemy więc max(0, Holiday − norma_dnia). Tylko dni ≤ dziś (przyszłe i tak
+    //      są poza sumą z kroku 2). Szczegóły: collectHolidayExcessByDate().
+    const holidayExcessByDate = collectHolidayExcessByDate(rowToDate, effectiveToday);
+    let holidayExcessMinutes = 0;
+    Object.values(holidayExcessByDate).forEach((m) => { holidayExcessMinutes += m; });
 
     // 2d. Odejmij godziny z wpisów "Time Off in Lieu" — pracownik wziął wolne w zamian
     //     za przepracowane nadgodziny. Odejmujemy z poziomu wpisu (entry-level), nie z m-footer —
@@ -636,7 +690,8 @@
 
     // Z przepracowanych odejmujemy tylko TOIL minionych dni — przyszłego TOIL nigdy w tej
     // sumie nie było (krok 2 bierze wyłącznie m-footer ≤ dziś); wnosi go futureToilAdjust.
-    totalWorkedMinutes -= overtimePayoutMinutes + toilElapsedMinutes;
+    // Nadwyżka Holiday ponad normę dnia (święto w weekend / etat < 8h) — patrz 2c'.
+    totalWorkedMinutes -= overtimePayoutMinutes + toilElapsedMinutes + holidayExcessMinutes;
 
     const correctionMinutes = Math.round(EFF.correctionHours * 60);
 
@@ -885,6 +940,14 @@
     );
 
     const normPerDay = EFF.hoursPerDay * 60;   // etat osoby (ustalony w calculate())
+    // Nadwyżka Holiday ponad normę dnia — ta sama reguła co w calculate() (krok 2c').
+    const toDate = (p) => {
+      if (!p) return null;
+      const d = new Date(today.getFullYear(), p.month, p.day);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    };
+    const holidayExcessByDate = collectHolidayExcessByDate(toDate, today);
     let runningBalance = 0;
 
     footerRows.forEach(({ row, parsed, dateAttr }) => {
@@ -911,7 +974,8 @@
       // delta = footer − OT − norma − TOIL. Identyczna formuła jak w calculate():
       // godziny TOIL pokrywają normę (są w footerze), ale są wypłatą z banku flex,
       // więc odejmujemy je DOKŁADNIE RAZ. Pełny dzień TOIL: 8 − 8 − 8 = −8:00.
-      const dayDelta = rawMinutes - (otPayoutByDate[dateAttr] || 0) - normPerDay - toilForDay;
+      const dayDelta = rawMinutes - (otPayoutByDate[dateAttr] || 0) - normPerDay - toilForDay
+                     - (holidayExcessByDate[dateAttr] || 0);
       runningBalance += dayDelta;
 
       const deltaClass = dayDelta >= 0 ? 'ftc-dw-pos' : 'ftc-dw-neg';

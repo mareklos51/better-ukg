@@ -137,6 +137,10 @@ Gotowe — wtyczka jest zainstalowana na stałe i nie wymaga trybu dewelopera.
 
 ## Historia wersji
 
+### v1.6.2
+
+- **Bugfix saldo przy święcie w weekend** — gdy święto wypadało w sobotę lub niedzielę (np. 1 listopada 2026), wtyczka liczyła jego 8h jak przepracowane i pokazywała saldo zawyżone o +8h. Teraz święto nigdy nie zmienia salda — zwalnia tylko z normy danego dnia.
+
 ### v1.6.1
 
 - **Godziny Clock In / Clock Out w formacie 24h** — UKG pokazuje godziny w formacie 12h z przyciskiem am/pm, a jedno przypadkowe kliknięcie przesuwa godzinę o 12h. Wtyczka przykrywa te pola własnymi polami 24h: wpisujesz `16:15` (albo `1615`), a wtyczka sama ustawia w UKG `04:15 pm` i sprawdza, czy zapis się zgadza. Gdy coś pójdzie nie tak, pole dostaje czerwoną ramkę i pokazuje godzinę, która faktycznie zapisała się w UKG — wystarczy wpisać ją ponownie. Funkcję można wyłączyć w menu wtyczki (**🕐 Godziny w formacie 24h**).
