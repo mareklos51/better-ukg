@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.6.2] – w przygotowaniu
+## [1.6.2] – 2026-11-03
 
 ### Dodano
 - **Przywrócony przełącznik „Sumy godzin w formacie HH:MM”** (domyślnie włączony) – UKG (XI 2026) wróciło do godzin dziesiętnych (`7.53 hrs`, Raw Total `7.53`) po okresie, w którym samo pokazywało `HH:MM` (v1.6.0 usunęło wtedy przełącznik). Konwersja jest wyłącznie wizualna: stopki dni (`m-footer`, Raw/Calc. Total) i Calc. Total wiersza wpisu zmieniane są **w miejscu** na tym samym węźle tekstowym (podmiana `textContent` jak w ≤ v1.5 odłączała węzeł Reacta), a osobny observer (`characterData` + atrybut `value`) konwertuje ponownie, gdy UKG wpisze nową wartość. Edytowalne pole Raw Total dostaje nakładkę `.ftc-hhmm-raw` (tekst przez `::after`, żeby nie zabrudzić `textContent` komórki), znikającą przy fokusie – wartość pola UKG nie jest zmieniana, edycja nadal w dziesiętnych. Gdy UKG serwuje `HH:MM`, funkcja jest bezczynna. Obliczenia nie zależą od przełącznika ani od formatu UKG (`parseHoursValue()` czyta oba; `7.53` i `07:32` to te same 452 min) – zweryfikowane na zrzutach w obu formatach: saldo, OT, TOIL, Holiday i ostatnie `∑` identyczne z konwersją i bez.

@@ -4,8 +4,8 @@ Rozszerzenie przeglądarki **Microsoft Edge / Chrome / Firefox** dla systemu **U
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.6.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.1/better-ukg-1.6.1-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.6.1-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.1/better-ukg-1.6.1-firefox.xpi) |
+| **Edge / Chrome** | [better-ukg-1.6.2-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.2/better-ukg-1.6.2-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.6.2-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.2/better-ukg-1.6.2-firefox.xpi) |
 
 ---
 
@@ -85,8 +85,8 @@ Pobierz paczkę odpowiednią dla swojej przeglądarki:
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.6.1-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.1/better-ukg-1.6.1-edge-chrome.zip) |
-| **Firefox** | [better-ukg-1.6.1-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.1/better-ukg-1.6.1-firefox.xpi) |
+| **Edge / Chrome** | [better-ukg-1.6.2-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.2/better-ukg-1.6.2-edge-chrome.zip) |
+| **Firefox** | [better-ukg-1.6.2-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.2/better-ukg-1.6.2-firefox.xpi) |
 
 Rozpakuj archiwum w dowolnym folderze (np. na pulpicie)
 
@@ -126,7 +126,7 @@ Kliknij ikonę puzzli na pasku przeglądarki i przypnij **Better UKG**, aby mie�
 
 ### Krok 1 – Pobierz plik
 
-Pobierz plik [better-ukg-1.6.1-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.1/better-ukg-1.6.1-firefox.xpi)
+Pobierz plik [better-ukg-1.6.2-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.2/better-ukg-1.6.2-firefox.xpi)
 
 ### Krok 2 – Zainstaluj
 
