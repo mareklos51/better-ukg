@@ -32,14 +32,16 @@ function hide(id) { document.getElementById(id).style.display = 'none'; }
 
 async function init() {
   // Wczytaj ustawienia
-  const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays', 'time24h']);
+  const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays', 'time24h', 'hhmmFormat']);
   const manualNorm      = stored.manualNorm     ?? 0;
   const vacationInDays  = stored.vacationInDays  ?? true;
   const time24h         = stored.time24h         ?? true;
+  const hhmmFormat      = stored.hhmmFormat      ?? true;
 
   document.getElementById('manual-norm').value        = manualNorm;
   document.getElementById('vacation-in-days').checked = vacationInDays;
   document.getElementById('time-24h').checked         = time24h;
+  document.getElementById('hhmm-format').checked      = hhmmFormat;
 
   // Pobierz dane z aktywnej karty (content.js)
   let tab;
@@ -169,6 +171,17 @@ document.getElementById('time-24h').addEventListener('change', async (e) => {
   if (tab) {
     try {
       await chrome.tabs.sendMessage(tab.id, { action: 'settingsUpdated', time24h });
+    } catch (_) {}
+  }
+});
+
+document.getElementById('hhmm-format').addEventListener('change', async (e) => {
+  const hhmmFormat = e.target.checked;
+  await chrome.storage.local.set({ hhmmFormat });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, { action: 'settingsUpdated', hhmmFormat });
     } catch (_) {}
   }
 });

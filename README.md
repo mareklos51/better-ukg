@@ -21,6 +21,7 @@ Wtyczka odczytuje dane bezpośrednio z timesheeta i oblicza:
 - **Overtime Payout** — godziny oznaczone jako *Overtime Payout* w kolumnie Activity są automatycznie **wykluczone** z salda flex
 - **Korekta ręczna** — pole w banerze i w menu wtyczki pozwala dodać lub odjąć dowolną liczbę godzin od salda flex (np. `-4`, `+8`, `-4.5`); przydatne gdy UKG liczy coś niestandardowo i wtyczka pokazuje błędne saldo
 - **Sugestia godziny wyjścia** — na ostatni dzień roboczy miesiąca, po wpisaniu godziny Clock In, baner automatycznie podpowiada o której wyjść, żeby wyzerować saldo flex
+- **Sumy godzin w formacie HH:MM** — gdy UKG pokazuje godziny po przecinku (`7.53 hrs`), wtyczka wyświetla je jako `07:32 hrs` (sumy dni, Calc. Total i Raw Total). Można to wyłączyć w menu wtyczki. Saldo flex liczy się poprawnie niezależnie od tego, w jakim formacie UKG podaje godziny
 
 ![Baner flex time na górze timesheeta](assets/flex-time-bar-timesheet.png)
 
@@ -139,6 +140,7 @@ Gotowe — wtyczka jest zainstalowana na stałe i nie wymaga trybu dewelopera.
 
 ### v1.6.2
 
+- **Powrót opcji „Sumy godzin w formacie HH:MM”** — UKG znów pokazuje godziny po przecinku (`7.53 hrs` zamiast `07:32 hrs`). Wtyczka ponownie zamienia je na `HH:MM` (domyślnie włączone; wyłączysz w menu wtyczki). Gdy UKG wróci do `HH:MM`, opcja po prostu nic nie robi.
 - **Bugfix saldo przy święcie w weekend** — gdy święto wypadało w sobotę lub niedzielę (np. 1 listopada 2026), wtyczka liczyła jego 8h jak przepracowane i pokazywała saldo zawyżone o +8h. Teraz święto nigdy nie zmienia salda — zwalnia tylko z normy danego dnia.
 
 ### v1.6.1

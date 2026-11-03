@@ -431,3 +431,41 @@ tr.ftc-incomplete-row:hover td {
   background: #fef2f2;
 }
 
+
+/* ─── Sumy godzin w formacie HH:MM (hhmmFormat) ───────────────────────────────
+   Nakładka na pole Raw Total z wartością dziesiętną UKG. Tekst przez ::after, żeby nie
+   zabrudzić textContent komórki. Przy fokusie znika — edycja idzie w formacie UKG. */
+.ftc-hhmm-host {
+  position: relative !important;
+}
+
+.ftc-hhmm-raw {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: inherit;
+  background: #fff;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+  pointer-events: none;   /* klik trafia w pole UKG pod spodem */
+  white-space: nowrap;
+}
+
+.ftc-hhmm-raw::after {
+  content: attr(data-hhmm);
+}
+
+.ftc-hhmm-host:focus-within > .ftc-hhmm-raw {
+  display: none;
+}
+
+/* Znacznik ręcznej edycji UKG („e”) w polu Raw Total — nad nakładką */
+.ftc-hhmm-host > :has(.c-manual-icon) {
+  position: relative;
+  z-index: 3;
+  pointer-events: none;
+}

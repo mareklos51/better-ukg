@@ -24,6 +24,7 @@
     manualNorm: 0,        // ręczna norma miesiąca (godziny); 0 = auto
     vacationInDays: true, // wyświetlaj salda urlopowe w dniach (zamiast godzin)
     time24h: true,        // Clock In/Out wpisywane i wyświetlane w formacie 24h (zamiast am/pm)
+    hhmmFormat: true,     // sumy godzin z UKG w dziesiętnych ("7.53 hrs") wyświetlaj jako HH:MM ("07:32 hrs")
   };
 
   // ─── Pamięć per osoba ────────────────────────────────────────────────────────
@@ -1693,6 +1694,7 @@
     const data = calculate();
     if (data) {
       injectBanner(data);
+      if (CFG.hhmmFormat) convertHoursToHHMM();
       injectDailyFlexWidgets();
       injectRestWarnings();      // po widgetach — badge ląduje pod deltą w tej samej komórce
       injectWeeklyRestWarnings();// j.w. — 35h odpoczynku tygodniowego (weekend)
@@ -2096,6 +2098,171 @@
     }
   }, true);
 
+  // ─── Sumy godzin w formacie HH:MM (hhmmFormat) ────────────────────────────────
+  //
+  // UKG serwuje godziny raz w dziesiętnych ("7.53 hrs", Raw Total "7.53"), raz w HH:MM
+  // ("07:32 hrs") — format zmieniał się już kilka razy (HH:MM ~X 2026, z powrotem
+  // dziesiętne XI 2026). Obliczenia są na to odporne (parseHoursValue() czyta oba), a ta
+  // sekcja tylko WYŚWIETLA wartości dziesiętne jako HH:MM:
+  //   • stopki dni (m-footer: Raw/Calc. Total "7.53 hrs") i Calc. Total wiersza wpisu ("7.53")
+  //     — tekst zmieniany W MIEJSCU na tym samym węźle tekstowym. Węzeł należy do Reacta:
+  //     podmiana textContent (jak w ≤ v1.5) odłączyłaby go i UKG przestałoby odświeżać
+  //     sumę po edycji. Gdy React wpisze nową wartość, łapie to observer (characterData)
+  //     i konwertuje ponownie.
+  //   • Raw Total — edytowalne pole UKG z maską dziesiętną. Jego wartości NIE ruszamy (poszłaby
+  //     do serwera), tylko przykrywamy je nakładką .ftc-hhmm-raw, która znika przy fokusie
+  //     (edycja nadal w dziesiętnych, jak oczekuje maska UKG).
+  // Odczyt dla obliczeń nie potrzebuje oryginałów: "07:32" i "7.53" to te same 452 minuty
+  // (konwersja idzie przez parseHoursValue(), który też zaokrągla do pełnych minut).
+  // Gdy UKG samo serwuje HH:MM, wzorzec dziesiętny nic nie łapie — sekcja jest bezczynna.
+
+  const DECIMAL_HOURS_TEXT_RE = /^(\s*)(-?\d+\.\d+)(\s*hrs?)?(\s*)$/i;
+  const RAW_TOTAL_SELECTOR    = 'tr[data-group-date] input[aria-label="Raw Total"]';
+  // Węzły, których nie konwertujemy: elementy wtyczki w komórkach (widgety mają własny format).
+  const HHMM_SKIP_SELECTOR    = INJECTED_CELL_SELECTOR + ', .ftc-hhmm-raw, .ftc-t24';
+
+  const hhmmOriginals = new WeakMap();   // węzeł tekstowy → { orig, shown } (do wyłączenia funkcji)
+  let hhmmObs        = null;
+  let hhmmSyncQueued = false;
+
+  /** "7.53 hrs" → "07:32 hrs", "7.53" → "07:32", "-0.50" → "-00:30"; null gdy to nie dziesiętne godziny */
+  function decimalHoursToHHMM(text) {
+    const m = (text || '').match(DECIMAL_HOURS_TEXT_RE);
+    if (!m) return null;
+    const mins = parseHoursValue(m[2]);
+    if (isNaN(mins)) return null;
+    return m[1] + (mins < 0 ? '-' : '') + formatMinutes(mins) + (m[3] || '') + m[4];
+  }
+
+  /** Węzły tekstowe komórki, z pominięciem elementów wstrzykniętych przez wtyczkę */
+  function forEachCellTextNode(td, fn) {
+    const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach((n) => { if (!n.parentElement?.closest(HHMM_SKIP_SELECTOR)) fn(n); });
+  }
+
+  /** Komórki timesheeta z gołą sumą godzin (bez pól formularza — Raw Total obsługuje nakładka) */
+  function hoursTextCells() {
+    return [...document.querySelectorAll('tr[data-group-date] td')]
+      .filter((td) => !td.querySelector('input, select, textarea, button'));
+  }
+
+  function convertHoursToHHMM() {
+    if (!CFG.hhmmFormat || !isTimesheetPage()) return;
+    hoursTextCells().forEach((td) => forEachCellTextNode(td, (node) => {
+      const shown = decimalHoursToHHMM(node.data);
+      if (shown === null) return;
+      hhmmOriginals.set(node, { orig: node.data, shown });
+      node.data = shown;
+    }));
+    document.querySelectorAll(RAW_TOTAL_SELECTOR).forEach(syncRawTotalOverlay);
+    // Sieroty: nakładka, z której hosta React usunął pole Raw Total
+    document.querySelectorAll('.ftc-hhmm-raw').forEach((ov) => {
+      if (!ov.parentElement?.querySelector('input[aria-label="Raw Total"]')) ov.remove();
+    });
+  }
+
+  /**
+   * Nakładka HH:MM na pole Raw Total. Tekst idzie przez ::after (attr data-hhmm), więc
+   * textContent komórki zostaje czysty — collectOvertimePayoutByDate() rozpoznaje TD
+   * Raw/Calc. Total po samym tekście i dopisany „07:32” by go zabrudził.
+   */
+  function syncRawTotalOverlay(input) {
+    const host = input.closest('[data-test="form-control-field"]') || input.parentElement;
+    if (!host) return;
+    let ov = host.querySelector(':scope > .ftc-hhmm-raw');
+    const shown = decimalHoursToHHMM(input.value || input.getAttribute('value') || '');
+    if (shown === null) {          // puste pole albo UKG samo pokazuje HH:MM
+      ov?.remove();
+      host.classList.remove('ftc-hhmm-host');
+      return;
+    }
+    if (!ov) {
+      ov = document.createElement('span');
+      ov.className = 'ftc-hhmm-raw';
+      ov.setAttribute('aria-hidden', 'true');
+      host.classList.add('ftc-hhmm-host');
+      host.appendChild(ov);
+    }
+    if (ov.dataset.hhmm !== shown.trim()) ov.dataset.hhmm = shown.trim();
+    // Wygląd jak pole UKG pod spodem (style UKG są zewnętrzne — mierzymy, nie zgadujemy).
+    const cs = getComputedStyle(input);
+    const ta = cs.textAlign;
+    ov.style.justifyContent = (ta === 'right' || ta === 'end') ? 'flex-end' : ta === 'center' ? 'center' : 'flex-start';
+    ov.style.paddingRight = cs.paddingRight;
+    ov.style.color = cs.color;
+    const bg = cs.backgroundColor;
+    ov.style.backgroundColor = (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') ? bg : '';
+    // Znacznik ręcznej edycji UKG („e”, .c-manual-icon) — CSS wynosi go nad nakładkę,
+    // tu odsuwamy tekst nakładki za jego prawą krawędź.
+    const iconRect = host.querySelector('.c-manual-icon')?.getBoundingClientRect();
+    ov.style.paddingLeft = iconRect?.width
+      ? Math.ceil(iconRect.right - host.getBoundingClientRect().left + 4) + 'px'
+      : cs.paddingLeft;
+  }
+
+  /** Wyłączenie funkcji: przywróć tekst UKG tam, gdzie React go od tej pory nie zmienił */
+  function revertHoursFromHHMM() {
+    hoursTextCells().forEach((td) => forEachCellTextNode(td, (node) => {
+      const rec = hhmmOriginals.get(node);
+      if (rec && node.data === rec.shown) node.data = rec.orig;
+      hhmmOriginals.delete(node);
+    }));
+    document.querySelectorAll('.ftc-hhmm-raw').forEach((el) => el.remove());
+    document.querySelectorAll('.ftc-hhmm-host').forEach((el) => el.classList.remove('ftc-hhmm-host'));
+  }
+
+  function syncHHMM() {
+    hhmmSyncQueued = false;
+    convertHoursToHHMM();
+  }
+
+  function queueHHMMSync() {
+    if (hhmmSyncQueued) return;
+    hhmmSyncQueued = true;
+    requestAnimationFrame(syncHHMM);
+  }
+
+  /** Włącza/wyłącza wyświetlanie HH:MM zgodnie z CFG.hhmmFormat. */
+  function setupHHMM() {
+    if (hhmmObs) { hhmmObs.disconnect(); hhmmObs = null; }
+    if (!CFG.hhmmFormat) { revertHoursFromHHMM(); return; }
+    // Osobny observer: React zmienia sumy dnia jako mutację tekstu (characterData), a
+    // wartość Raw Total jako atrybut — główny observer (tylko nowe wiersze) ich nie widzi.
+    // Własne zmiany (node.data = "07:32") też tu wpadają, ale nie pasują do wzorca
+    // dziesiętnego, więc nie zapętlają się.
+    hhmmObs = new MutationObserver((mutations) => {
+      if (hhmmSyncQueued || !isTimesheetPage()) return;
+      const relevant = mutations.some((mut) => {
+        const el = mut.target.nodeType === Node.ELEMENT_NODE ? mut.target : mut.target.parentElement;
+        if (!el || el.closest(HHMM_SKIP_SELECTOR)) return false;
+        if (mut.type === 'attributes') return el.matches('input[aria-label="Raw Total"]');
+        if (mut.type === 'characterData') {
+          return DECIMAL_HOURS_TEXT_RE.test(mut.target.data) && !!el.closest('tr[data-group-date]');
+        }
+        return [...mut.addedNodes].some((n) => {
+          if (n.nodeType === Node.TEXT_NODE) {
+            return DECIMAL_HOURS_TEXT_RE.test(n.data) && !!el.closest('tr[data-group-date]');
+          }
+          return n.nodeType === Node.ELEMENT_NODE && !n.matches(HHMM_SKIP_SELECTOR) &&
+            (!!n.closest('tr[data-group-date]') || !!n.querySelector('tr[data-group-date]'));
+        });
+      });
+      if (relevant) queueHHMMSync();
+    });
+    hhmmObs.observe(document.body, {
+      childList: true, subtree: true, characterData: true,
+      attributes: true, attributeFilter: ['value'],
+    });
+    queueHHMMSync();
+  }
+
+  // Edycja Raw Total: wartość zmieniana przez Reacta nie zawsze rusza atrybut.
+  ['input', 'focusout'].forEach((type) => document.addEventListener(type, (e) => {
+    if (CFG.hhmmFormat && e.target.matches?.('input[aria-label="Raw Total"]')) queueHHMMSync();
+  }, true));
+
   // ─── Komunikacja z popup ──────────────────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -2112,6 +2279,7 @@
       if (msg.manualNorm !== undefined) CFG.manualNorm = msg.manualNorm;
       if (msg.vacationInDays !== undefined) CFG.vacationInDays = msg.vacationInDays;
       if (msg.time24h !== undefined) { CFG.time24h = msg.time24h; setupTime24(); }
+      if (msg.hhmmFormat !== undefined) { CFG.hhmmFormat = msg.hhmmFormat; setupHHMM(); }
       if (isVacationPage()) convertVacationBalancesToDays();
       tryCalculateAndShow();
     }
@@ -2124,21 +2292,21 @@
   async function init() {
     // Wczytaj ustawienia z chrome.storage
     try {
-      const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays', 'time24h', 'personData']);
+      const stored = await chrome.storage.local.get(['manualNorm', 'vacationInDays', 'time24h', 'hhmmFormat', 'personData']);
       if (stored.manualNorm  !== undefined) CFG.manualNorm  = stored.manualNorm;
       if (stored.vacationInDays !== undefined) CFG.vacationInDays = stored.vacationInDays;
       if (stored.time24h !== undefined) CFG.time24h = stored.time24h;
+      if (stored.hhmmFormat !== undefined) CFG.hhmmFormat = stored.hhmmFormat;
       if (stored.personData && typeof stored.personData === 'object') personData = stored.personData;
       // Sprzątanie po starym globalnym etacie — nie jest już używany (standard = stała 8h).
       chrome.storage.local.remove('hoursPerDay');
       chrome.storage.local.remove('correctionHours');
-      // UKG samo pokazuje HH:MM (od v1.6.0) — przełącznik formatu usunięty.
-      chrome.storage.local.remove('hhmmFormat');
     } catch (_) {}
 
     if (isTimesheetPage() || isVacationPage()) startPolling();
     setupMutationObserver();
     setupTime24();
+    setupHHMM();
   }
 
   window.addEventListener('hashchange', () => {

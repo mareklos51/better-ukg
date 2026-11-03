@@ -2,6 +2,9 @@
 
 ## [1.6.2] – w przygotowaniu
 
+### Dodano
+- **Przywrócony przełącznik „Sumy godzin w formacie HH:MM”** (domyślnie włączony) – UKG (XI 2026) wróciło do godzin dziesiętnych (`7.53 hrs`, Raw Total `7.53`) po okresie, w którym samo pokazywało `HH:MM` (v1.6.0 usunęło wtedy przełącznik). Konwersja jest wyłącznie wizualna: stopki dni (`m-footer`, Raw/Calc. Total) i Calc. Total wiersza wpisu zmieniane są **w miejscu** na tym samym węźle tekstowym (podmiana `textContent` jak w ≤ v1.5 odłączała węzeł Reacta), a osobny observer (`characterData` + atrybut `value`) konwertuje ponownie, gdy UKG wpisze nową wartość. Edytowalne pole Raw Total dostaje nakładkę `.ftc-hhmm-raw` (tekst przez `::after`, żeby nie zabrudzić `textContent` komórki), znikającą przy fokusie – wartość pola UKG nie jest zmieniana, edycja nadal w dziesiętnych. Gdy UKG serwuje `HH:MM`, funkcja jest bezczynna. Obliczenia nie zależą od przełącznika ani od formatu UKG (`parseHoursValue()` czyta oba; `7.53` i `07:32` to te same 452 min) – zweryfikowane na zrzutach w obu formatach: saldo, OT, TOIL, Holiday i ostatnie `∑` identyczne z konwersją i bez.
+
 ### Naprawiono
 - **Fałszywy plus salda od święta w weekend** – UKG wpisuje godziny *Holiday* do sumy dnia (`m-footer`). W dzień roboczy 8h święta dokładnie znosi 8h normy, ale święto w weekend (np. niedziela 1 XI 2026, norma 0) dawało saldo **+8:00**, a przy etacie 7h każde święto +1:00. Nowe `collectHolidayExcessByDate()` odejmuje `max(0, Holiday − norma_dnia)` dla dni ≤ dziś – w `calculate()` i w `injectDailyFlexWidgets()` (ostatnie `∑` zgodne z banerem). Praca w dniu święta nadal liczy się na plus. Opis normy w banerze („X dni rob. + Y Holiday”) liczy tylko święta Pn–Pt.
 - **Nieaktualna wersja w stopce popupu** – stopka pokazywała na sztywno „v1.5”. Numer wersji jest teraz czytany z manifestu (`chrome.runtime.getManifest().version`).
