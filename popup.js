@@ -1,8 +1,8 @@
 /**
  * Better UKG – popup script
  *
- * Komunikuje się z content.js poprzez chrome.tabs.sendMessage,
- * a ustawienia przechowuje w chrome.storage.local.
+ * Dane salda pobiera z content.js (chrome.tabs.sendMessage 'getFlexData'); ustawienia
+ * zapisuje w chrome.storage.local — content.js odbiera je przez chrome.storage.onChanged.
  */
 
 // ─── Wersja w stopce ─────────────────────────────────────────────────────────
@@ -152,28 +152,16 @@ function renderData(data) {
 
 // ─── Zapis ustawień ───────────────────────────────────────────────────────────
 
-// Toggles działające natychmiast bez klikania "Zapisz"
-document.getElementById('vacation-in-days').addEventListener('change', async (e) => {
-  const vacationInDays = e.target.checked;
-  await chrome.storage.local.set({ vacationInDays });
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) {
-    try {
-      await chrome.tabs.sendMessage(tab.id, { action: 'settingsUpdated', vacationInDays });
-    } catch (_) {}
-  }
-});
-
-document.getElementById('time-24h').addEventListener('change', async (e) => {
-  const time24h = e.target.checked;
-  await chrome.storage.local.set({ time24h });
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) {
-    try {
-      await chrome.tabs.sendMessage(tab.id, { action: 'settingsUpdated', time24h });
-    } catch (_) {}
-  }
-});
+// Przełączniki działają natychmiast, bez „Zapisz”. Content script każdej karty słucha
+// chrome.storage.onChanged, więc wystarczy zapis do magazynu.
+function bindToggle(id, key) {
+  document.getElementById(id).addEventListener('change', (e) => {
+    chrome.storage.local.set({ [key]: e.target.checked });
+  });
+}
+bindToggle('vacation-in-days', 'vacationInDays');
+bindToggle('time-24h', 'time24h');
+bindToggle('hhmm-format', 'hhmmFormat');
 
 document.getElementById('hhmm-format').addEventListener('change', async (e) => {
   const hhmmFormat = e.target.checked;
@@ -191,18 +179,6 @@ document.getElementById('save-btn').addEventListener('click', async () => {
   const vacationInDays  = document.getElementById('vacation-in-days').checked;
 
   await chrome.storage.local.set({ manualNorm, vacationInDays });
-
-  // Poinformuj content.js o nowych ustawieniach i odśwież widok
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) {
-    try {
-      await chrome.tabs.sendMessage(tab.id, {
-        action: 'settingsUpdated',
-        manualNorm,
-        vacationInDays,
-      });
-    } catch (_) {}
-  }
 
   const btn = document.getElementById('save-btn');
   btn.textContent = '✅ Zapisano!';

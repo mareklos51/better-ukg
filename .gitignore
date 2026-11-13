@@ -25,3 +25,8 @@ Thumbs.db
 .vscode/
 *.swp
 *~
+
+# Pozostałości merge'a, lokalne ustawienia Claude Code i tickety z audytu — lokalne
+*.orig
+.claude/
+tickets/

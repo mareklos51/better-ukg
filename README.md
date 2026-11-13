@@ -4,7 +4,7 @@ Rozszerzenie przeglądarki **Microsoft Edge / Chrome / Firefox** dla systemu **U
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.6.2-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.2/better-ukg-1.6.2-edge-chrome.zip) |
+| **Edge / Chrome** | [better-ukg-1.7.0-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.7.0/better-ukg-1.7.0-edge-chrome.zip) |
 | **Firefox** | [better-ukg-1.6.2-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.2/better-ukg-1.6.2-firefox.xpi) |
 
 ---
@@ -85,7 +85,7 @@ Pobierz paczkę odpowiednią dla swojej przeglądarki:
 
 | Przeglądarka | Pobierz |
 |---|---|
-| **Edge / Chrome** | [better-ukg-1.6.2-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.6.2/better-ukg-1.6.2-edge-chrome.zip) |
+| **Edge / Chrome** | [better-ukg-1.7.0-edge-chrome.zip](https://github.com/mareklos51/better-ukg/releases/download/v1.7.0/better-ukg-1.7.0-edge-chrome.zip) |
 | **Firefox** | [better-ukg-1.6.2-firefox.xpi](https://github.com/mareklos51/better-ukg/releases/download/v1.6.2/better-ukg-1.6.2-firefox.xpi) |
 
 Rozpakuj archiwum w dowolnym folderze (np. na pulpicie)
@@ -137,6 +137,17 @@ Gotowe — wtyczka jest zainstalowana na stałe i nie wymaga trybu dewelopera.
 ---
 
 ## Historia wersji
+
+### v1.7.0
+
+- **Bugfix alert odpoczynku tygodniowego przy pracy w ostatnią sobotę miesiąca** — kto pracował w sobotę będącą ostatnim dniem miesiąca (np. 31 października), dostawał alert o zbyt krótkim odpoczynku tygodniowym, choć ten odpoczynek przypadał już na kolejny miesiąc i wtyczka nie mogła go sprawdzić. Teraz taki weekend (oraz weekend, który jeszcze trwa) nie jest oceniany.
+- **Bugfix zgodność widgetów dziennych z banerem** — ostatnie `∑` pod sumami dni zawsze równa się teraz saldu w banerze. Zapomniany dzień roboczy pokazuje `−08:00`, praca w weekend ma swój widget, a nadgodziny (*Overtime Payout*) wpisane z góry na przyszły dzień nie obniżają salda przed tym dniem. Dzisiejszy dzień bez żadnych wpisów nie nalicza już normy.
+- **Bugfix stare miesiące** — po Nowym Roku widgety i czerwone podświetlenia dla miesięcy z poprzedniego roku (np. grudnia) znikały. Teraz działają.
+- **Bugfix „Pozostało”** — uwzględnia święta wpisane z góry, dni urlopu i wolne za nadgodziny (TOIL), więc sugerowana godzina wyjścia w ostatni dzień miesiąca faktycznie zeruje saldo.
+- **Bugfix kilka kart UKG** — ustawienie etatu lub korekty w jednej karcie nie znika już po zapisie w innej. Zmiany w menu wtyczki działają od razu we wszystkich kartach, a „✅ Zapisano!” pojawia się natychmiast.
+- **Bugfix salda urlopowe** — poprawne przeliczenie na dni także wtedy, gdy UKG pokaże godziny w formacie `HH:MM`.
+- **Bugfix znacznik „e” przy godzinach w formacie 24h** — UKG oznacza czerwonym „e” godziny dodane ręcznie (a nie przez Check-in/Check-out na stronie głównej). Przy włączonym formacie 24h pole wtyczki zasłaniało ten znacznik. Teraz „e” jest widoczne obok godziny także w trybie 24h.
+- **Odświeżenie kodu** — saldo, widgety dzienne i „Pozostało” liczone są teraz z jednego wspólnego źródła, a powielone fragmenty kodu zastąpiono wspólnymi funkcjami. Mniej miejsc, w których wyniki mogłyby się rozjechać.
 
 ### v1.6.2
 

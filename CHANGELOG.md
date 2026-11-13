@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.7.0] – 2026-11-13
+
+### Naprawiono
+- **Fałszywy alert odpoczynku tygodniowego przy pracy w ostatnią sobotę okresu** – praca w sb 31 X (ostatni dzień miesiąca) dawała fioletowy alert 35h, bo jedyną widoczną przerwą tego weekendu była pt → sb (~17h), a właściwy odpoczynek po sobocie wypada już w następnym miesiącu, poza DOM. `findWeeklyRestViolations()` pomija teraz weekend, do którego należy przerwa po ostatnim dniu zegarowym (koniec okresu albo dziś) – ta przerwa jeszcze trwa, więc jej długość jest nieznana. Dotyczy też bieżącego weekendu, gdy dziś jest sobota/niedziela.
+- **Znacznik ręcznej edycji „e” niewidoczny w trybie 24h** – UKG oznacza czerwonym „e” (`span.c-manual-icon`, `aria-label="Edited time"`) godziny wpisane ręcznie w timesheecie (w odróżnieniu od Check-in/Check-out ze strony głównej). Znacznik siedzi w tym samym hoście co pole czasu, a pole 24h (`.ftc-t24`, `inset: 0`, białe tło) przykrywało go w całości. Kontener znacznika jest teraz wyniesiony nad pole 24h (`z-index: 3`, `pointer-events: none`), a `alignTime24WithManualIcon()` (wołane z `refreshTime24Overlay()`) mierzy znacznik i odsuwa tekst pola 24h za jego prawą krawędź. Znacznik, który pojawi się po edycji, łapie istniejący observer (zmiana `aria-label`).
+- **Ostatnie `∑` widgetów ≠ saldo banera** – saldo i widgety dzienne liczyły delty dni dwiema osobnymi kopiami reguł, które się rozjechały. Teraz jedno źródło: `buildFlexDays()` buduje deltę każdego dnia okresu, `calculate()` je sumuje, a `injectDailyFlexWidgets(data)` tylko je renderuje (samokontrola `∑ = saldo − korekta` w konsoli). Naprawione przy okazji rozjazdy:
+  - zapomniany dzień roboczy (0h, bez absencji) – baner liczył −8:00, widget nic; teraz widget `−08:00` także w dniu bez wpisów (w `m-header`),
+  - praca w weekend – w saldzie, ale bez widgetu; teraz z widgetem,
+  - **Overtime Payout wpisany na przyszły dzień obniżał saldo już dziś** – teraz liczy się dopiero od tego dnia (`🔒 OT` pokazuje OT dni minionych),
+  - **dziś bez żadnych wpisów** (UKG renderuje wtedy sam nagłówek dnia, bez stopki) naliczało normę dnia; teraz jak dzień z 0h – norma dziś dopiero po wpisaniu godzin.
+- **Widgety dzienne i czerwone podświetlenia znikały dla okresu z poprzedniego roku** – daty wierszy (`"THU Dec 10"`, bez roku) dostawały rok z dzisiejszej daty, więc w styczniu cały grudzień był „w przyszłości”. Rok bierzemy z okresu (`getPeriodContext().dateFromAttr()`).
+- **„Pozostało” i sugerowana godzina wyjścia zawyżone/zaniżone** – wzór pomijał dni absencji bez godzin, święta wpisane z góry (grudzień: +16h) i TOIL (sugestia wyjścia zostawiała saldo −TOIL). Teraz „Pozostało” = minus prognoza salda na koniec miesiąca: przyszłe dni wnoszą normę pomniejszoną o zaplanowane absencje, TOIL trzeba odpracować. Przy ręcznej normie miesiąca bez zmian.
+- **Zapis w jednej karcie kasował etat/korektę ustawione w drugiej** – każda karta trzymała własną kopię `personData` i nadpisywała nią magazyn. Karty słuchają teraz `chrome.storage.onChanged`; tą samą drogą docierają ustawienia z popupu (wiadomość `settingsUpdated` usunięta).
+- **„✅ Zapisano!” w popupie pojawiało się z opóźnieniem albo wcale** – content script zwracał `true` („odpowiem asynchronicznie”) na każdą wiadomość, a na zapis ustawień nigdy nie odpowiadał.
+- **Salda urlopowe w formacie `HH:MM`** – konwersja na dni czytała godziny przez `parseFloat` (`"12:30"` → 12h); teraz `parseHoursValue()` jak w timesheecie.
+- **Holiday z małej litery** („Public holiday”) nie trafiał do opisu normy w banerze – wykrywanie kodów Time Off jest teraz wszędzie bez rozróżniania wielkości liter (`readTimeOff()`).
+
+### Zmieniono (wewnętrznie)
+- Wspólne helpery zamiast powielonych pętli: `readTimeOff()`, `footerMinutes()`, `dayTotalCell()`, `collectTimeOffMinutesByDate()`; usunięte `isTodayEmpty()`, lokalne `rowToDate`/`toDate` i duplikat `formatClock24()`; trzy identyczne handlery przełączników w popupie → `bindToggle()`.
+
 ## [1.6.2] – 2026-11-03
 
 ### Dodano

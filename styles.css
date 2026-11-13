@@ -426,6 +426,15 @@ tr.ftc-incomplete-row:hover td {
   opacity: 0;
 }
 
+/* Znacznik ręcznej edycji UKG (czerwone „e”, .c-manual-icon) — wynosimy jego kontener nad
+   pole 24h, żeby go nie zasłaniało. pointer-events: none — klik trafia w pole 24h pod spodem.
+   Odsunięcie tekstu pola 24h za znacznik: alignTime24WithManualIcon() w content.js. */
+.ftc-t24-host > :has(.c-manual-icon) {
+  position: relative;
+  z-index: 3;
+  pointer-events: none;
+}
+
 .ftc-t24--error {
   box-shadow: inset 0 0 0 2px #dc2626 !important;
   background: #fef2f2;

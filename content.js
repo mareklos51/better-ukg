@@ -2,13 +2,12 @@
  * Better UKG – content script
  * Strona docelowa: *.saashr.com (UKG Pro)
  *
- * Algorytm (uproszczony — pełna formuła w calculate()):
+ * Algorytm (uproszczony — pełny model w buildFlexDays()):
  *  1. Pobierz zakres okresu z nagłówka timesheeta (span.c-timesheet-header__date-carousel-title)
- *  2. Zsumuj "Calc. Total" z m-footer ≤ dziś (tr[data-group-date].m-footer, TD[5])
- *  3. Odejmij Overtime Payout i TOIL minionych dni; wykryj Holiday/absencje (anulują normę dnia)
- *  4. Saldo = przepracowane(−OT−TOIL_minione) − norma_minionych_dni
- *             − TOIL_całego_miesiąca (także zaplanowany na przyszłe dni) + korekty
- *  5. Wstrzyknij baner + dzienne widgety; podświetl niedokończone dni
+ *  2. Dla każdego dnia okresu: delta = Calc. Total (m-footer, TD[5]) − OT − TOIL
+ *     − nadwyżka Holiday − norma (0 w weekend, w dzień absencji bez godzin i dziś niewpisane)
+ *  3. Saldo = Σ delt dni ≤ dziś (+ dni przyszłe z TOIL) + korekta
+ *  4. Wstrzyknij baner + dzienne widgety (te same delty); podświetl niedokończone dni
  */
 
 (function () {
@@ -114,6 +113,46 @@
     return parseHoursToMinutes(input.value || input.getAttribute('value') || '');
   }
 
+  const ENTRY_ROW_SELECTOR = 'tr[data-group-date][data-shift-id]';
+
+  /** Kod z pola Time Off wpisu, małymi literami ('' gdy brak) — "holiday", "time off in lieu", … */
+  function readTimeOff(row) {
+    const input = row.querySelector('input[aria-label="Time Off"]');
+    return input ? (input.value || input.getAttribute('value') || '').trim().toLowerCase() : '';
+  }
+  const isToilCode    = (code) => code.includes('time off in lieu');
+  const isHolidayCode = (code) => code.includes('holiday');
+
+  /**
+   * Komórka sumy dnia (td[5]): m-footer, a dla dnia bez wpisów — m-header (UKG renderuje
+   * wtedy sam nagłówek z "0.00 hrs" w tej samej kolumnie). null, gdy dnia nie ma w DOM.
+   */
+  function dayTotalCell(dateAttr) {
+    const row = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`)
+             || document.querySelector(`tr[data-group-date="${dateAttr}"].m-header`);
+    return row ? row.querySelectorAll('td')[CALC_TOTAL_TD_INDEX] || null : null;
+  }
+
+  /** Calc. Total dnia z m-footer → minuty (0 gdy brak stopki). */
+  function footerMinutes(dateAttr) {
+    const row = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`);
+    const td  = row && row.querySelectorAll('td')[CALC_TOTAL_TD_INDEX];
+    return td ? parseHoursToMinutes(getOriginalText(td)) : 0;
+  }
+
+  /** Raw Total wpisów Time Off pasujących do `match(code)`, per dzień: { dateAttr → minuty }. */
+  function collectTimeOffMinutesByDate(match) {
+    const byDate = {};
+    document.querySelectorAll(ENTRY_ROW_SELECTOR).forEach((row) => {
+      if (!match(readTimeOff(row))) return;
+      const mins = readRawTotalMinutes(row);
+      if (mins <= 0) return;
+      const dateAttr = row.getAttribute('data-group-date');
+      byDate[dateAttr] = (byDate[dateAttr] || 0) + mins;
+    });
+    return byDate;
+  }
+
   /** 481 min → "+08:01" lub "-00:45" */
   function formatBalance(minutes) {
     const sign = minutes >= 0 ? '+' : '-';
@@ -158,7 +197,7 @@
    * Parsuje pojedynczą angielską datę "May 01, 2026" (też "September 1 2026") → Date
    * (lokalna północ). Jawne parsowanie zamiast new Date(string): new Date() na takim
    * formacie jest zależne od implementacji/locale silnika JS, a tu chcemy wyniku
-   * deterministycznego i spójnego z parseDateAttr()/rowToDate() (też new Date(rok, mc, dz)).
+   * deterministycznego i spójnego z getPeriodContext().dateFromAttr() (też new Date(rok, mc, dz)).
    * Zakłada angielskie nazwy miesięcy (UKG renderuje nagłówek po angielsku).
    */
   function parseEnglishDate(str) {
@@ -319,31 +358,6 @@
     return { month, day };
   }
 
-  /**
-   * Zwraca true jeśli m-footer dla dzisiejszej daty istnieje, ale ma 0 godzin.
-   * Używane żeby nie naliczać normy za dzień, który jeszcze nie jest wpisany.
-   */
-  function isTodayEmpty(today) {
-    const todayMonth = today.getMonth();
-    const todayDay   = today.getDate();
-    let foundRow = false;
-    let hasHours = false;
-
-    document.querySelectorAll('tr[data-group-date].m-footer').forEach((row) => {
-      const parsed = parseDateAttr(row.getAttribute('data-group-date'));
-      if (!parsed) return;
-      if (parsed.month !== todayMonth || parsed.day !== todayDay) return;
-
-      foundRow = true;
-      const tds = row.querySelectorAll('td');
-      if (tds.length > CALC_TOTAL_TD_INDEX) {
-        if (parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX])) > 0) hasHours = true;
-      }
-    });
-
-    return foundRow && !hasHours;
-  }
-
   function isLastWorkingDayOfMonth(today, periodEnd) {
     if (today > periodEnd) return false;
     if (today.getDay() === 0 || today.getDay() === 6) return false;
@@ -383,7 +397,7 @@
   function getTodayStartMinutes(today) {
     const todayMonth = today.getMonth();
     const todayDay   = today.getDate();
-    for (const row of document.querySelectorAll('tr[data-group-date][data-shift-id]')) {
+    for (const row of document.querySelectorAll(ENTRY_ROW_SELECTOR)) {
       const parsed = parseDateAttr(row.getAttribute('data-group-date'));
       if (!parsed) continue;
       if (parsed.month !== todayMonth || parsed.day !== todayDay) continue;
@@ -412,7 +426,7 @@
    */
   function collectOvertimePayoutByDate() {
     const byDate = {};
-    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
+    document.querySelectorAll(ENTRY_ROW_SELECTOR).forEach((row) => {
       const activityInput = row.querySelector('input[aria-label="Activity"]');
       if (!activityInput) return;
 
@@ -441,270 +455,166 @@
   }
 
   /**
-   * Nadwyżka godzin Holiday ponad normę dnia, per dzień: { dateAttr → minuty }.
+   * Nadwyżka godzin absencji (Time Off poza TOIL: Holiday, Sick Time, Vacation, …) ponad
+   * normę dnia, per dzień: { dateAttr → minuty }.
    *
-   * Święto ma być dla salda neutralne: zwalnia z normy dnia, ale nie jest „pracą na plus”.
-   * UKG wlicza godziny Holiday do Calc. Total, więc w zwykły dzień roboczy 8h święta
-   * dokładnie znosi 8h normy. Problem pojawia się, gdy godzin święta jest więcej niż normy:
-   *   • święto w weekend (np. niedziela 1 XI 2026): norma 0, Holiday 8h → fałszywe +8:00,
+   * Absencja ma być dla salda neutralna: zwalnia z normy dnia, ale nie jest „pracą na plus”.
+   * UKG wlicza jej godziny do Calc. Total, więc w zwykły dzień roboczy 8h absencji dokładnie
+   * znosi 8h normy. Problem pojawia się, gdy godzin absencji jest więcej niż normy:
+   *   • absencja w weekend (Holiday w nd 1 XI 2026, Sick Time ciągnięte przez sb–nd):
+   *     norma 0, 8h → fałszywe +8:00,
    *   • etat < 8h (np. 7h): Holiday 8h → fałszywe +1:00.
-   * Zwracamy max(0, Holiday − norma_dnia) do odjęcia od przepracowanych. Praca w dniu
-   * święta (footer 10h = 8h Holiday + 2h) nadal daje +2:00.
+   * Zwracamy max(0, absencja − norma_dnia) do odjęcia od przepracowanych. Praca w dniu
+   * absencji (footer 10h = 8h Sick Time + 2h pracy przed lekarzem) nadal daje +2:00 —
+   * zdublowany czas ma poprawić w UKG menedżer, wtyczka go nie zgaduje.
    *
-   * Godziny Holiday z Raw Total wpisu (entry-level, jak TOIL). Tylko dni ≤ upTo —
-   * przyszłych dni nie ma w sumie przepracowanych. Jedno źródło prawdy dla salda
-   * (calculate) i widgetów dziennych (injectDailyFlexWidgets).
+   * Godziny z Raw Total wpisu (entry-level, jak TOIL).
    */
-  function collectHolidayExcessByDate(toDate, upTo) {
-    const holidayByDate = {};
-    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
-      const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
-      if (!timeOffInput) return;
-      const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
-      if (!val.toLowerCase().includes('holiday')) return;
-      const mins = readRawTotalMinutes(row);
-      if (mins <= 0) return;
-      const dateAttr = row.getAttribute('data-group-date');
-      holidayByDate[dateAttr] = (holidayByDate[dateAttr] || 0) + mins;
-    });
-
+  function collectAbsenceExcessByDate(ctx) {
     const normPerDay = EFF.hoursPerDay * 60;
     const excess = {};
-    for (const [dateAttr, mins] of Object.entries(holidayByDate)) {
-      const d = toDate(parseDateAttr(dateAttr));
-      if (!d || d > upTo) continue;
+    for (const [dateAttr, mins] of Object.entries(collectTimeOffMinutesByDate((code) => code && !isToilCode(code)))) {
+      const d = ctx.dateFromAttr(dateAttr);
+      if (!d) continue;
       const dayNorm = (d.getDay() === 0 || d.getDay() === 6) ? 0 : normPerDay;
-      const over = mins - dayNorm;
-      if (over > 0) excess[dateAttr] = over;
+      if (mins > dayNorm) excess[dateAttr] = mins - dayNorm;
     }
     return excess;
   }
+
+  /**
+   * Model salda per dzień — JEDNO źródło prawdy dla banera (calculate) i widgetów
+   * dziennych (injectDailyFlexWidgets). Zwraca wpis dla każdego dnia kalendarzowego okresu:
+   *
+   *   worked = footer − OT − TOIL − nadwyżka_absencji    (footer ≥ TOIL, patrz niżej)
+   *   delta  = worked − norma                              (gdy dzień jest „liczony”)
+   *
+   * Model TOIL: godziny TOIL wchodzą do Calc. Total dnia, więc pokrywają normę na równi
+   * z pracą, ale są wypłatą z banku flex — odejmujemy je DOKŁADNIE RAZ:
+   *   • pełny dzień TOIL  (footer 8, TOIL 8):        8 − 8 − 8 = −8:00  ✔ bank płaci cały dzień
+   *   • częściowy TOIL    (footer 8:39, TOIL 1:00):  8:39 − 8 − 1 = −0:21
+   *   • TOIL + praca      (footer 10, TOIL 8):       10 − 8 − 8 = −6:00  ✔ 2h realnej pracy na plus
+   *
+   * Norma dnia: etat w Pn–Pt, 0 w weekend. Dzień bez godzin z wpisem absencji (Blood Donation,
+   * Vacation, … — inna niż TOIL/Holiday) nie ma normy (pracownik miał wolne, a UKG nie
+   * wpisało godzin). Holiday nie potrzebuje wyjątku — UKG wpisuje jego godziny do footera.
+   *
+   * Dzień jest LICZONY do salda, gdy:
+   *   • jest ≤ effectiveToday (przyszłych godzin nie ma jeszcze w sumie — Holiday wpisany z
+   *     góry, OT zaplanowane na piątek nie ruszają salda),
+   *   • albo ma TOIL: zaplanowane wolne z banku obciąża saldo już w chwili wpisania (środa,
+   *     wolne na piątek → saldo spada dziś), a ta sama formuła sprawia, że saldo nie drgnie,
+   *     gdy ten dzień stanie się miniony.
+   * `pending` = dziś, jeszcze nic nie wpisane → norma dziś się nie nalicza (wchodzi za to do
+   * „Pozostało”, które liczy `projected` — patrz calculate()).
+   *
+   * Dni okresu nieobecne w DOM mają footer 0 (norma nalicza się jak dla pustego dnia).
+   */
+  function buildFlexDays(ctx) {
+    const { period, today, effectiveToday } = ctx;
+    const otByDate      = collectOvertimePayoutByDate();
+    const toilByDate    = collectTimeOffMinutesByDate(isToilCode);
+    const absenceExcess = collectAbsenceExcessByDate(ctx);
+    const timeOffByDate = collectTimeOffMinutesByDate((code) => code && !isToilCode(code));
+    const absenceDates  = new Set();
+    const attrByTime    = {};
+    document.querySelectorAll('tr[data-group-date]').forEach((row) => {
+      const dateAttr = row.getAttribute('data-group-date');
+      const d = ctx.dateFromAttr(dateAttr);
+      if (d) attrByTime[d.getTime()] = dateAttr;
+      if (!row.hasAttribute('data-shift-id')) return;
+      const code = readTimeOff(row);
+      if (code && !isToilCode(code) && !isHolidayCode(code)) absenceDates.add(dateAttr);
+    });
+
+    const normPerDay = EFF.hoursPerDay * 60;
+    const days = [];
+    for (const d = new Date(period.start); d <= period.end; d.setDate(d.getDate() + 1)) {
+      const date     = new Date(d);
+      const dateAttr = attrByTime[date.getTime()] || null;
+      const toil     = (dateAttr && toilByDate[dateAttr]) || 0;
+      const ot       = (dateAttr && otByDate[dateAttr]) || 0;
+      // Zabezpieczenie: gdyby UKG jeszcze nie doliczyło TOIL do footera, przyjmij same
+      // godziny TOIL jako pokrycie dnia (inaczej dzień policzyłby się jako −norma −TOIL).
+      const credited = Math.max(dateAttr ? footerMinutes(dateAttr) : 0, toil);
+      const weekday  = date.getDay() !== 0 && date.getDay() !== 6;
+      const absent   = credited === 0 && absenceDates.has(dateAttr);
+      const norm     = weekday && !absent ? normPerDay : 0;
+      const isPast   = date <= effectiveToday;
+      const pending  = credited === 0 && date.getTime() === today.getTime();
+      // Nadwyżka z Raw Total nie może przekroczyć tego, co faktycznie jest w footerze —
+      // gdyby UKG nie wliczyło absencji do Calc. Total, odjęlibyśmy godziny, których nie ma.
+      const excess   = (dateAttr && absenceExcess[dateAttr]) || 0;
+      const worked   = credited - ot - toil - Math.min(excess, Math.max(0, credited - ot - toil));
+      const counted  = isPast || toil > 0;
+      days.push({
+        dateAttr, date, isPast, pending, norm, worked, ot, toil, counted,
+        delta:   worked - (pending ? 0 : norm),
+        // Prognoza na koniec miesiąca (do „Pozostało”): dzień nieliczony pokrywają tylko
+        // zaplanowane absencje (Holiday/Vacation wpisane z góry), nie wpisy pracy.
+        projected: (counted ? worked : ((dateAttr && timeOffByDate[dateAttr]) || 0) - excess) - norm,
+      });
+    }
+    return days;
+  }
+
+  const sumOf = (list, fn) => list.reduce((acc, x) => acc + fn(x), 0);
 
   function calculate() {
     // 1. Nagłówek okresu → zakres, "dziś" i konwerter dat wiersza
     const ctx = getPeriodContext();
     if (!ctx) return null;
-    const { titleEl, period, today, effectiveToday } = ctx;
+    const { titleEl, period, today } = ctx;
+    if (!document.querySelector('tr[data-group-date]')) return null;   // timesheet się jeszcze ładuje
 
     // Ustal osobę (z nagłówka) i miesiąc → rozwiąż wartości obowiązujące (etat, korekta).
     currentPerson   = getPersonContext();
     currentMonthKey = getMonthKey(period);
     EFF             = resolveEffective(currentPerson, currentMonthKey);
 
-    // Pomocnik: konwertuje wynik parseDateAttr na obiekt Date (rok z okresu)
-    function rowToDate(parsed) {
-      if (!parsed) return null;
-      const d = new Date(period.start.getFullYear(), parsed.month, parsed.day);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
+    // 2. Saldo per dzień (OT, TOIL, Holiday, absencje, dziś niewpisane) — buildFlexDays().
+    const days    = buildFlexDays(ctx);
+    const past    = days.filter((d) => d.isPast);
+    const counted = days.filter((d) => d.counted);
 
-    // 2. Suma "Calc. Total" ze wszystkich wierszy m-footer — TYLKO daty ≤ dziś.
-    //    Przyszłe wpisy (np. Time Off: Holiday z góry wpisane) nie są jeszcze "zarobione"
-    //    i nie powinny wpływać na saldo.
-    let totalWorkedMinutes = 0;
-    const allRows = document.querySelectorAll('tr[data-group-date]');
-    if (allRows.length === 0) return null;   // timesheet się jeszcze ładuje
-
-    allRows.forEach((row) => {
-      if (!row.classList.contains('m-footer')) return;
-      const parsed = parseDateAttr(row.getAttribute('data-group-date'));
-      if (parsed) {
-        const rowDate = rowToDate(parsed);
-        if (rowDate && rowDate > effectiveToday) return; // pomiń przyszłe daty
-      }
-      const tds = row.querySelectorAll('td');
-      if (tds.length > CALC_TOTAL_TD_INDEX) {
-        totalWorkedMinutes += parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX]));
-      }
-    });
-
-    // 2b. Odejmij godziny z wpisów "Overtime Payout" — nie wliczają się do flex.
-    //     Szczegóły detekcji: collectOvertimePayoutByDate().
-    const otPayoutByDateCalc = collectOvertimePayoutByDate();
-    let overtimePayoutMinutes = 0;
-    Object.values(otPayoutByDateCalc).forEach((m) => { overtimePayoutMinutes += m; });
-
-    // 2c. Wykryj wpisy "Time Off: Holiday" — nie są dniami roboczymi, pokazujemy osobno.
-    //     Skanujemy WSZYSTKIE wpisy miesiąca (nie tylko ≤ dziś) dla celów wyświetlania normy.
-    //     Do opisu normy liczą się tylko święta w dni robocze (Pn–Pt) — święto w niedzielę
-    //     (np. 1 XI 2026) nie zdejmuje żadnego dnia z normy miesiąca.
+    // 3. Opis normy w banerze: święta w dni robocze (Pn–Pt) całego miesiąca — święto w
+    //    niedzielę (np. 1 XI 2026) nie zdejmuje żadnego dnia z normy miesiąca.
     const holidayDates = new Set();
-    let holidayMinutes = 0;
-    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
-      const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
-      if (!timeOffInput) return;
-      const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
-      if (!val.includes('Holiday')) return;
+    document.querySelectorAll(ENTRY_ROW_SELECTOR).forEach((row) => {
+      if (!isHolidayCode(readTimeOff(row))) return;
       const dateAttr = row.getAttribute('data-group-date');
-      if (holidayDates.has(dateAttr)) return;
-      const hDate = rowToDate(parseDateAttr(dateAttr));
-      if (!hDate || hDate.getDay() === 0 || hDate.getDay() === 6) return;
-      holidayDates.add(dateAttr);
-      const footerRow = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`);
-      if (footerRow) {
-        const tds = footerRow.querySelectorAll('td');
-        if (tds.length > CALC_TOTAL_TD_INDEX) {
-          holidayMinutes += parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX]));
-        }
-      }
+      const hDate = ctx.dateFromAttr(dateAttr);
+      if (hDate && hDate.getDay() !== 0 && hDate.getDay() !== 6) holidayDates.add(dateAttr);
     });
-    const holidayCount = holidayDates.size;
+    const holidayCount   = holidayDates.size;
+    const holidayMinutes = sumOf([...holidayDates], footerMinutes);
 
-    // 2c'. Nadwyżka Holiday ponad normę dnia — święto ma być NEUTRALNE dla salda.
-    //      UKG wpisuje godziny święta do Calc. Total, co w dzień roboczy dokładnie pokrywa
-    //      normę (8 − 8 = 0). Ale gdy święto wypada w weekend (norma 0) albo etat < 8h,
-    //      te godziny dawały fałszywy plus (niedziela 1 XI z Holiday 8h → saldo +8:00).
-    //      Odejmujemy więc max(0, Holiday − norma_dnia). Tylko dni ≤ dziś (przyszłe i tak
-    //      są poza sumą z kroku 2). Szczegóły: collectHolidayExcessByDate().
-    const holidayExcessByDate = collectHolidayExcessByDate(rowToDate, effectiveToday);
-    let holidayExcessMinutes = 0;
-    Object.values(holidayExcessByDate).forEach((m) => { holidayExcessMinutes += m; });
-
-    // 2d. Odejmij godziny z wpisów "Time Off in Lieu" — pracownik wziął wolne w zamian
-    //     za przepracowane nadgodziny. Odejmujemy z poziomu wpisu (entry-level), nie z m-footer —
-    //     to jedyna metoda poprawna dla częściowego TOIL (np. 1.5h TOIL + 4.7h pracy tego samego
-    //     dnia: footer = 6.2h, ale odejść należy tylko 1.5h).
-    //
-    //     Wiersze Time Off mają inną strukturę niż wpisy pracy: godziny są w
-    //     input[aria-label="Raw Total"], a nie w czystym decimal TD (jak w OT Payout).
-    let toilMinutes = 0;
-    const toilByDateCalc = {};   // dateAttr → TOIL minut (do rozbicia na miniony/przyszły)
-    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
-      const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
-      if (!timeOffInput) return;
-      const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
-      if (!val.toLowerCase().includes('time off in lieu')) return;
-
-      const mins = readRawTotalMinutes(row);
-      if (mins > 0) {
-        toilMinutes += mins;
-        const dateAttr = row.getAttribute('data-group-date');
-        toilByDateCalc[dateAttr] = (toilByDateCalc[dateAttr] || 0) + mins;
-      }
-    });
-
-    // 2e. Wykryj dni z wpisem Time Off (nie-TOIL, nie-Holiday) gdzie UKG nie wykazuje
-    //     godzin w m-footer — np. Blood Donation, Vacation itp. Norma za te dni
-    //     nie powinna obowiązywać (analogicznie do pełnych dni TOIL).
-    const absenceTimeOffDates = new Set();
-    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
-      const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
-      if (!timeOffInput) return;
-      const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
-      if (!val.trim()) return;
-      if (val.toLowerCase().includes('time off in lieu')) return; // TOIL — obsługiwany w 2d
-      if (val.toLowerCase().includes('holiday')) return;          // Holiday — UKG wpisuje godziny do m-footer
-      absenceTimeOffDates.add(row.getAttribute('data-group-date'));
-    });
-
-    // 3. Minione dni robocze
-    // Jeśli dziś jest dzień roboczy bez wpisanych godzin, nie naliczaj normy za dziś.
-    // Wyjątek: jeśli 0h wynika z absencji (2e), pomiń przesunięcie — absenceNormAdjust już to obsłuży.
-    const todayIsAbsenceDay = [...absenceTimeOffDates].some(dateAttr => {
-      const parsed = parseDateAttr(dateAttr);
-      if (!parsed) return false;
-      const d = rowToDate(parsed);
-      return d && d.getTime() === today.getTime();
-    });
-    let normEndDate = effectiveToday;
-    const todayIsWeekday = effectiveToday.getDay() !== 0 && effectiveToday.getDay() !== 6;
-    if (todayIsWeekday && !todayIsAbsenceDay && effectiveToday.getTime() === today.getTime() && isTodayEmpty(today)) {
-      normEndDate = new Date(today);
-      normEndDate.setDate(normEndDate.getDate() - 1);
-    }
-
-    const elapsedWorkingDays   = countWorkingDays(period.start, normEndDate);
-    const fullMonthWorkingDays = countWorkingDays(period.start, period.end);
-
-    // 4. Normy
+    // 4. Sumy do wyświetlenia
     const normPerDay            = EFF.hoursPerDay * 60;
-
-    // Dla każdego dnia z wpisem absencji (2e) gdzie m-footer = 0h (system nie naliczył godzin)
-    // anuluj normę za ten dzień — pracownik miał ustawowo wolne, nie powinien mieć deficytu.
-    let absenceNormAdjustMinutes = 0;
-    for (const dateAttr of absenceTimeOffDates) {
-      const parsed = parseDateAttr(dateAttr);
-      if (!parsed) continue;
-      const rowDate = rowToDate(parsed);
-      if (!rowDate || rowDate > effectiveToday) continue;
-      const dow = rowDate.getDay();
-      if (dow === 0 || dow === 6) continue;
-      const footerRow = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`);
-      if (!footerRow) continue;
-      const ftds = footerRow.querySelectorAll('td');
-      if (ftds.length <= CALC_TOTAL_TD_INDEX) continue;
-      const footerTotal = parseHoursToMinutes(getOriginalText(ftds[CALC_TOTAL_TD_INDEX]));
-      if (footerTotal === 0) absenceNormAdjustMinutes += normPerDay;
-    }
-
-    const normElapsedMinutes    = elapsedWorkingDays * normPerDay;
+    const fullMonthWorkingDays  = countWorkingDays(period.start, period.end);
     const normFullMonthMinutes  = EFF.manualNorm > 0
       ? Math.round(EFF.manualNorm * 60)
       : fullMonthWorkingDays * normPerDay;
+    const totalWorkedMinutes    = sumOf(past, (d) => d.worked);
+    const normElapsedMinutes    = sumOf(past, (d) => (d.pending ? 0 : d.norm));
+    const elapsedWorkingDays    = past.filter((d) => d.norm > 0 && !d.pending).length;
+    const overtimePayoutMinutes = sumOf(past, (d) => d.ot);
+    const toilMinutes           = sumOf(days, (d) => d.toil);
+    const toilFutureMinutes     = sumOf(days.filter((d) => !d.isPast), (d) => d.toil);
+    const correctionMinutes     = Math.round(EFF.correctionHours * 60);
 
-    // ── TOIL: jedno odjęcie z banku flex, norma dnia liczona normalnie ──────────
-    //
-    // Model: godziny TOIL wchodzą do Calc. Total dnia (UKG je tam wpisuje), więc pokrywają
-    // normę na równi z pracą, ale są wypłatą z banku flex. Stąd dla każdego dnia:
-    //
-    //     delta_dnia = footer − OT − norma − TOIL
-    //
-    // TOIL jest odejmowany DOKŁADNIE RAZ. Sprawdzenia:
-    //   • pełny dzień TOIL  (footer 8, TOIL 8):        8 − 8 − 8 = −8:00  ✔ bank płaci cały dzień
-    //   • częściowy TOIL    (footer 8.65, TOIL 1.00):  8.65 − 8 − 1 = −0.35  ✔ 0.65h nadwyżki
-    //                                                  ponad normę minus 1h wypłacona z banku
-    //   • TOIL + praca      (footer 10, TOIL 8):       10 − 8 − 8 = −6:00  ✔ 2h realnej pracy na plus
-    //
-    // Dwa rodzaje TOIL wg daty:
-    //   - toilElapsedMinutes — dni ≤ dziś; TYLKO te godziny siedzą w totalWorkedMinutes
-    //     (krok 2 sumuje m-footer wyłącznie dla dat ≤ dziś), więc tylko one są z niego odjęte.
-    //   - futureToilAdjustMinutes — dni > dziś. Zaplanowane wolne z banku obciąża saldo już
-    //     w chwili wpisania (środa: wolne zaklepane na piątek → saldo spada dziś), a dzień
-    //     przyszły jest w całości poza totalWorked/normElapsed. Dlatego wnosimy go osobno
-    //     tą samą formułą (footer − norma − TOIL) — dzięki temu saldo NIE drgnie w momencie,
-    //     gdy ten dzień stanie się miniony.
-    let toilElapsedMinutes       = 0;
-    let futureToilAdjustMinutes  = 0;
-    for (const [dateAttr, toilMins] of Object.entries(toilByDateCalc)) {
-      const parsed = parseDateAttr(dateAttr);
-      if (!parsed) continue;
-      const rowDate = rowToDate(parsed);
-      if (!rowDate) continue;
-      if (rowDate <= effectiveToday) {
-        toilElapsedMinutes += toilMins;
-        continue;                       // norma i footer tego dnia są już w normElapsed/totalWorked
-      }
-      const dow = rowDate.getDay();
-      const dayNorm = (dow === 0 || dow === 6) ? 0 : normPerDay;
-      const footerRow = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`);
-      const ftds = footerRow ? footerRow.querySelectorAll('td') : null;
-      const footerTotal = (ftds && ftds.length > CALC_TOTAL_TD_INDEX)
-        ? parseHoursToMinutes(getOriginalText(ftds[CALC_TOTAL_TD_INDEX]))
-        : 0;
-      // Zabezpieczenie: gdyby UKG jeszcze nie doliczyło TOIL do footera, przyjmij same
-      // godziny TOIL jako pokrycie dnia (inaczej dzień policzyłby się jako −norma −TOIL).
-      const credited = Math.max(footerTotal, toilMins);
-      futureToilAdjustMinutes += credited - dayNorm - toilMins;
-    }
-    const toilFutureMinutes = toilMinutes - toilElapsedMinutes;
+    // 5. Saldo = Σ delt dni liczonych + korekta. Ostatnie ∑ widgetów = saldo − korekta.
+    const balanceMinutes = sumOf(counted, (d) => d.delta) + correctionMinutes;
 
-    // Z przepracowanych odejmujemy tylko TOIL minionych dni — przyszłego TOIL nigdy w tej
-    // sumie nie było (krok 2 bierze wyłącznie m-footer ≤ dziś); wnosi go futureToilAdjust.
-    // Nadwyżka Holiday ponad normę dnia (święto w weekend / etat < 8h) — patrz 2c'.
-    totalWorkedMinutes -= overtimePayoutMinutes + toilElapsedMinutes + holidayExcessMinutes;
-
-    const correctionMinutes = Math.round(EFF.correctionHours * 60);
-
-    // Formuła salda:
-    //   saldo = przepracowane(−OT−TOIL_minione) − norma_minionych_dni
-    //           + futureToilAdjust (dni przyszłe z TOIL, tą samą formułą) + korekta + absenceAdj
-    // absenceAdj: norma za dni absencji (Blood Donation, itp.) gdzie UKG nie wykazało godzin
-    const balanceMinutes   = totalWorkedMinutes - normElapsedMinutes + futureToilAdjustMinutes + correctionMinutes + absenceNormAdjustMinutes;
-    // Pozostało do wyrobienia: norma miesiąca pomniejszona o CAŁY TOIL miesiąca — każda
-    // godzina TOIL pokrywa godzinę normy (płaci za nią bank flex), więc nie trzeba jej
-    // przepracować. Dotyczy też TOIL zaplanowanego na przyszłe dni.
-    const remainingMinutes = normFullMonthMinutes - toilMinutes - totalWorkedMinutes - correctionMinutes;
+    // 6. Pozostało do wyrobienia = ile jeszcze przepracować, żeby saldo na koniec miesiąca
+    //    wyszło 0, czyli minus prognoza salda, gdyby nic więcej nie wpisano. Przyszłe dni
+    //    wnoszą swoją normę pomniejszoną o zaplanowane absencje (Holiday z góry = 0), dni
+    //    absencji bez godzin — nic, dzisiejszy niewpisany dzień — pełną normę. TOIL (też
+    //    przyszły) jest już w saldzie jako wypłata z banku, więc trzeba go odpracować.
+    //    Ręczna norma miesiąca (manualNorm) zachowuje stary sens: norma − przepracowane.
+    const remainingMinutes = EFF.manualNorm > 0
+      ? normFullMonthMinutes - toilMinutes - totalWorkedMinutes - correctionMinutes
+      : -(sumOf(days, (d) => d.projected) + correctionMinutes);
 
     let isLastWorkingDay = false;
     let suggestedEndTime = null;
@@ -737,6 +647,8 @@
       holidayMinutes,
       isLastWorkingDay,
       suggestedEndTime,
+      // Delty dni do widgetów (bez Date — dane idą też do popupu)
+      days: counted.map(({ dateAttr, worked, delta }) => ({ dateAttr, worked, delta })),
       periodText: titleEl.textContent.trim(),
       // Kontekst osoby + rozwiązane ustawienia (dla banera i popupu)
       personName:        currentPerson.name,
@@ -889,107 +801,40 @@
   // ─── Dzienny widget flex pod Calc. Total ──────────────────────────────────────
 
   /**
-   * Pod sumą godzin każdego dnia (TD Calc. Total w m-footer) wstrzykuje mały widget
-   * pokazujący: delta danego dnia vs norma | bieżące saldo skumulowane.
-   * Dni z wpisem Time Off (Holiday, TOIL, itp.) są pomijane.
+   * Pod sumą godzin każdego liczonego dnia (td[5] w m-footer, a dla dnia bez wpisów — w
+   * m-header) wstrzykuje widget: delta dnia | saldo skumulowane (∑). Delty pochodzą z
+   * calculate() (buildFlexDays) — te same liczby co w banerze, więc ostatnie ∑ = saldo − korekta.
+   * Dni, w których nic się nie działo (weekend bez pracy, urlop bez godzin, dziś jeszcze
+   * niewpisane), nie dostają widgetu. Zapomniany dzień roboczy dostaje −norma.
    */
-  function injectDailyFlexWidgets() {
+  function injectDailyFlexWidgets(data) {
     if (!isTimesheetPage()) return;
-
-    // Usuń stare widgety
     document.querySelectorAll('.ftc-daily-widget').forEach((el) => el.remove());
 
-    // UWAGA: NIE pomijamy dni z absencją (Childcare PTO, Vacation, Holiday, Blood Donation, …).
-    // UKG wlicza godziny absencji do Calc. Total dnia (np. 6.70h pracy + 0.33h Childcare PTO
-    // = footer 07:02), więc traktujemy każdy miniony dzień roboczy tak samo jak baner:
-    // delta = footer − norma. Dni z absencją "na cały dzień" (footer = 0h) i tak są pomijane
-    // niżej (rawMinutes === 0), co odpowiada anulowaniu normy w calculate() (absenceNormAdjust).
-    // Pominięcie absencji z footerem > 0 (jak było wcześniej) rozjeżdżało skumulowane ∑ z saldem
-    // banera dla dni częściowej absencji. TOIL i OT Payout nadal odejmujemy per-dzień (poniżej).
-
-    // TOIL per dzień — entry-level z input[aria-label="Raw Total"] (wiersze Time Off
-    // nie mają decimal TDs jak wpisy pracy, tylko input Raw Total)
-    const toilByDate = {};
-    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
-      const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
-      if (!timeOffInput) return;
-      const val = timeOffInput.value || timeOffInput.getAttribute('value') || '';
-      if (!val.toLowerCase().includes('time off in lieu')) return;
-      const dateAttr = row.getAttribute('data-group-date');
-      const mins = readRawTotalMinutes(row);
-      if (mins > 0) {
-        toilByDate[dateAttr] = (toilByDate[dateAttr] || 0) + mins;
-      }
-    });
-
-    // Overtime Payout per dzień — spójne z logiką bannera (odejmujemy per dzień)
-    const otPayoutByDate = collectOvertimePayoutByDate();
-
-    // Zbierz i posortuj wiersze m-footer chronologicznie
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const footerRows = [];
-    document.querySelectorAll('tr[data-group-date].m-footer').forEach((row) => {
-      const dateAttr = row.getAttribute('data-group-date');
-      const parsed = parseDateAttr(dateAttr);
-      if (parsed) footerRows.push({ row, parsed, dateAttr });
-    });
-    footerRows.sort((a, b) =>
-      a.parsed.month !== b.parsed.month
-        ? a.parsed.month - b.parsed.month
-        : a.parsed.day - b.parsed.day
-    );
-
-    const normPerDay = EFF.hoursPerDay * 60;   // etat osoby (ustalony w calculate())
-    // Nadwyżka Holiday ponad normę dnia — ta sama reguła co w calculate() (krok 2c').
-    const toDate = (p) => {
-      if (!p) return null;
-      const d = new Date(today.getFullYear(), p.month, p.day);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    };
-    const holidayExcessByDate = collectHolidayExcessByDate(toDate, today);
     let runningBalance = 0;
-
-    footerRows.forEach(({ row, parsed, dateAttr }) => {
-      const rowDate = new Date(today.getFullYear(), parsed.month, parsed.day);
-      rowDate.setHours(0, 0, 0, 0);
-
-      // Pomiń weekendy (norma = 0, przepracowane = 0)
-      const dow = rowDate.getDay();
-      if (dow === 0 || dow === 6) return;
-
-      const toilForDay = toilByDate[dateAttr] || 0;
-      // Dni przyszłe co do zasady pomijamy (nic jeszcze nie zarobiono), ALE zaplanowany TOIL
-      // obciąża bank flex już w chwili wpisania — tak samo liczy go baner. Bez tego wyjątku
-      // ∑ ostatniego widgetu rozjeżdżałoby się z saldem u góry.
-      if (rowDate > today && toilForDay === 0) return;
-
-      const tds = row.querySelectorAll('td');
-      if (tds.length <= CALC_TOTAL_TD_INDEX) return;
-      const footerMinutes = parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX]));
-      // To samo zabezpieczenie co w calculate(): gdyby UKG nie doliczyło TOIL do footera.
-      const rawMinutes = Math.max(footerMinutes, toilForDay);
-      if (rawMinutes === 0) return; // dzień bez godzin — brak widgetu
-
-      // delta = footer − OT − norma − TOIL. Identyczna formuła jak w calculate():
-      // godziny TOIL pokrywają normę (są w footerze), ale są wypłatą z banku flex,
-      // więc odejmujemy je DOKŁADNIE RAZ. Pełny dzień TOIL: 8 − 8 − 8 = −8:00.
-      const dayDelta = rawMinutes - (otPayoutByDate[dateAttr] || 0) - normPerDay - toilForDay
-                     - (holidayExcessByDate[dateAttr] || 0);
-      runningBalance += dayDelta;
-
-      const deltaClass = dayDelta >= 0 ? 'ftc-dw-pos' : 'ftc-dw-neg';
-      const sumClass   = runningBalance >= 0 ? 'ftc-dw-sum-pos' : 'ftc-dw-sum-neg';
+    let shownBalance   = 0;   // ∑ ostatniego widgetu, który faktycznie trafił na stronę
+    data.days.forEach(({ dateAttr, worked, delta }) => {
+      runningBalance += delta;
+      if (worked === 0 && delta === 0) return;
+      const td = dateAttr && dayTotalCell(dateAttr);
+      if (!td) return;
+      shownBalance = runningBalance;
 
       const widget = document.createElement('div');
       widget.className = 'ftc-daily-widget';
       widget.innerHTML =
-        `<span class="${deltaClass}">${formatBalance(dayDelta)}</span>` +
+        `<span class="${delta >= 0 ? 'ftc-dw-pos' : 'ftc-dw-neg'}">${formatBalance(delta)}</span>` +
         `<span class="ftc-dw-sep">│</span>` +
-        `<span class="ftc-dw-sum ${sumClass}">∑&nbsp;${formatBalance(runningBalance)}</span>`;
-      tds[CALC_TOTAL_TD_INDEX].appendChild(widget);
+        `<span class="ftc-dw-sum ${runningBalance >= 0 ? 'ftc-dw-sum-pos' : 'ftc-dw-sum-neg'}">∑&nbsp;${formatBalance(runningBalance)}</span>`;
+      td.appendChild(widget);
     });
+
+    // Samokontrola: ostatnie ∑ musi równać się saldu banera (bez korekty). Rozjazd = dzień
+    // z niezerową deltą, którego nie ma w DOM (brak wiersza / komórki td[5]).
+    const expected = data.balanceMinutes - data.correctionMinutes;
+    if (shownBalance !== expected) {
+      console.warn('[Better UKG] ∑ widgetów', formatBalance(shownBalance), '≠ saldo banera', formatBalance(expected));
+    }
   }
 
   // ─── Podświetlanie niedokończonych dni (Clock In bez Clock Out) ───────────────
@@ -1015,16 +860,14 @@
     document.querySelectorAll('.ftc-incomplete-row').forEach((el) =>
       el.classList.remove('ftc-incomplete-row'));
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const ctx = getPeriodContext();
+    if (!ctx) return;
 
-    // Przeszły dzień roboczy (Pn–Pt, przed dziś)?
+    // Przeszły dzień roboczy (Pn–Pt, przed dziś)? Rok z okresu — atrybut UKG go nie ma.
     function isPastWeekday(dateAttr) {
-      const parsed = parseDateAttr(dateAttr);
-      if (!parsed) return false;
-      const d = new Date(today.getFullYear(), parsed.month, parsed.day);
-      d.setHours(0, 0, 0, 0);
-      if (d >= today) return false;            // tylko przeszłość (pomijamy dziś i przyszłość)
+      const d = ctx.dateFromAttr(dateAttr);
+      if (!d) return false;
+      if (d >= ctx.today) return false;        // tylko przeszłość (pomijamy dziś i przyszłość)
       const dow = d.getDay();
       if (dow === 0 || dow === 6) return false; // pomiń weekendy
       return true;
@@ -1033,7 +876,7 @@
     // Zmapuj daty → wiersze wpisów oraz czy którykolwiek wpis ma Raw Total > 0.
     const entryRowsByDate   = {};   // dateAttr → [tr, ...]
     const hasRawTotalByDate = {};   // dateAttr → bool
-    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
+    document.querySelectorAll(ENTRY_ROW_SELECTOR).forEach((row) => {
       const dateAttr = row.getAttribute('data-group-date');
       if (!entryRowsByDate[dateAttr]) entryRowsByDate[dateAttr] = [];
       entryRowsByDate[dateAttr].push(row);
@@ -1088,8 +931,8 @@
   // czy Childcare PTO 15:00–15:20 to nie praca i nie może przedłużać dnia pracy.
   //
   // UWAGA — to NIE jest czwarte miejsce z regułami flex i celowo NIE rozróżnia
-  // TOIL / Holiday / pozostałych absencji tak, jak robią to calculate() i
-  // injectDailyFlexWidgets(). Tam chodzi o to, ile godzin się zalicza do salda;
+  // TOIL / Holiday / pozostałych absencji tak, jak robi to
+  // buildFlexDays(). Tam chodzi o to, ile godzin się zalicza do salda;
   // tutaj o jedno pytanie: czy w danym momencie pracowano. Każda absencja odpowiada
   // na nie jednakowo („nie"), więc wystarczy sprawdzić, czy Time Off jest niepuste.
   // Zmiana reguł flex nie powinna pociągać zmian w tej sekcji.
@@ -1128,18 +971,14 @@
   function collectWorkDayTimes() {
     const days = {};
 
-    document.querySelectorAll('tr[data-group-date][data-shift-id]').forEach((row) => {
+    document.querySelectorAll(ENTRY_ROW_SELECTOR).forEach((row) => {
       const dateAttr = row.getAttribute('data-group-date');
       const day = days[dateAttr] || (days[dateAttr] = {
         start: null, end: null, endUnknown: false, hasOpaqueWork: false,
       });
 
       // Absencje nie są pracą — pomijamy je nawet z wpisanymi godzinami.
-      const timeOffInput = row.querySelector('input[aria-label="Time Off"]');
-      const timeOff = timeOffInput
-        ? (timeOffInput.value || timeOffInput.getAttribute('value') || '').trim()
-        : '';
-      if (timeOff) return;
+      if (readTimeOff(row)) return;
 
       const startMins = parseClockInput(row.querySelector('input[name="start_time"]'));
       const endMins   = parseClockInput(row.querySelector('input[name="end_time"]'));
@@ -1364,6 +1203,14 @@
       }
     }
 
+    // Przerwa po OSTATNIM dniu zegarowym jeszcze trwa (koniec okresu albo dziś) — nie
+    // znamy jej długości, a to ona może być właściwym odpoczynkiem tygodniowym.
+    // Przykład: praca w sb 31 X (ostatni dzień miesiąca) — jedyna widoczna przerwa
+    // tego weekendu to pt → sb (~17h), a prawdziwa przypada już na listopad.
+    // weekendKeyDate(prev.date) to dokładnie ten weekend, który ta przerwa obejmie
+    // (pn–pt → najbliższy, sb/nd → bieżący).
+    if (prev) unknown.add(dateKey(weekendKeyDate(prev.date)));
+
     return Object.entries(best)
       .filter(([key, v]) => !unknown.has(key) && v.restMinutes < MIN_WEEKLY_REST_MINUTES)
       .map(([, v]) => {
@@ -1465,13 +1312,7 @@
       const dow = date.getDay();
       if (dow === 0 || dow === 6) return;               // weekend — cały dzień może być OT
 
-      const footer = document.querySelector(`tr[data-group-date="${dateAttr}"].m-footer`);
-      if (!footer) return;
-      const tds = footer.querySelectorAll('td');
-      if (tds.length <= CALC_TOTAL_TD_INDEX) return;
-
-      const footerMinutes  = parseHoursToMinutes(getOriginalText(tds[CALC_TOTAL_TD_INDEX]));
-      const regularMinutes = Math.max(0, footerMinutes - otMinutes);
+      const regularMinutes = Math.max(0, footerMinutes(dateAttr) - otMinutes);
       if (regularMinutes >= normPerDay) return;         // norma wypracowana — OT w porządku
 
       violations.push({
@@ -1549,7 +1390,7 @@
       if (!textNode || textNode.nodeType !== Node.TEXT_NODE || textNode.textContent.trim() === '')
         return;
 
-      const hrs = parseFloat(textNode.textContent.trim());
+      const hrs = parseHoursValue(textNode.textContent) / 60;   // dziesiętne albo HH:MM
       if (isNaN(hrs)) return;
 
       el.setAttribute('data-ftc-orig-text', textNode.textContent.trim());
@@ -1574,7 +1415,7 @@
             (n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== ''
           );
           if (textNode) {
-            const hrs = parseFloat(textNode.textContent.trim());
+            const hrs = parseHoursValue(textNode.textContent) / 60;
             if (!isNaN(hrs)) {
               valueEl.setAttribute('data-ftc-orig-text', textNode.textContent.trim());
               textNode.textContent = String(parseFloat((hrs / 8).toFixed(2)));
@@ -1588,9 +1429,8 @@
       // Detail list items: <b>208.00 hrs</b>
       card.querySelectorAll('.text-list-item--line .data b').forEach((b) => {
         if (b.getAttribute('data-ftc-days')) return;
-        const m = b.textContent.trim().match(/^([\d.]+)\s*hrs$/i);
-        if (!m) return;
-        const hrs = parseFloat(m[1]);
+        if (!/^[\d.:]+\s*hrs$/i.test(b.textContent.trim())) return;
+        const hrs = parseHoursValue(b.textContent) / 60;
         if (isNaN(hrs)) return;
         b.setAttribute('data-ftc-orig', b.textContent.trim());
         b.textContent = `${parseFloat((hrs / 8).toFixed(2))} days`;
@@ -1695,7 +1535,7 @@
     if (data) {
       injectBanner(data);
       if (CFG.hhmmFormat) convertHoursToHHMM();
-      injectDailyFlexWidgets();
+      injectDailyFlexWidgets(data);
       injectRestWarnings();      // po widgetach — badge ląduje pod deltą w tej samej komórce
       injectWeeklyRestWarnings();// j.w. — 35h odpoczynku tygodniowego (weekend)
       injectOvertimeWarnings();  // j.w. — alert o nadgodzinach bez wypracowanej normy dnia
@@ -1768,10 +1608,6 @@
   function readAmPm(el) {
     const m = (el.getAttribute('aria-label') || '').toLowerCase().match(/(am|pm)$/);
     return m ? m[1] : null;
-  }
-
-  function formatClock24(mins) {
-    return fmt2(Math.floor(mins / 60)) + ':' + fmt2(mins % 60);
   }
 
   /**
@@ -1924,10 +1760,27 @@
     overlay.readOnly = ro;
     overlay.classList.toggle('ftc-t24--readonly', ro);
     overlay.placeholder = orig.getAttribute('placeholder') || '';
+    alignTime24WithManualIcon(overlay);
     if (document.activeElement === overlay || overlay.dataset.ftcBusy) return;
     const mins = parseClockInput(orig);
     const raw  = (orig.value || orig.getAttribute('value') || '').trim();
-    overlay.value = mins !== null ? formatClock24(mins) : raw;
+    overlay.value = mins !== null ? formatClock(mins) : raw;
+  }
+
+  /**
+   * Znacznik ręcznej edycji UKG (czerwone „e”, `span.c-manual-icon`, aria-label „Edited time”)
+   * siedzi w tym samym hoście co pole, po lewej. Pole 24h przykrywa cały host białym tłem,
+   * więc CSS wynosi znacznik nad nie, a tu odsuwamy tekst pola 24h za prawą krawędź znacznika.
+   * Szerokość mierzymy (style UKG są zewnętrzne), zamiast zgadywać stałą.
+   */
+  function alignTime24WithManualIcon(overlay) {
+    const host = overlay.parentElement;
+    const icon = host?.querySelector('.c-manual-icon');
+    if (!icon) { overlay.style.paddingLeft = ''; return; }
+    const hostRect = host.getBoundingClientRect();
+    const iconRect = icon.getBoundingClientRect();
+    if (!iconRect.width) return;               // jeszcze niewyrenderowany — poprawi kolejne odświeżenie
+    overlay.style.paddingLeft = Math.ceil(iconRect.right - hostRect.left + 4) + 'px';
   }
 
   function attachTime24Overlay(orig) {
@@ -1991,7 +1844,7 @@
 
       const nextFocus = e.relatedTarget;
       overlay.dataset.ftcBusy = '1';
-      overlay.value = parsed === null ? '' : formatClock24(parsed);
+      overlay.value = parsed === null ? '' : formatClock(parsed);
       let ok = false;
       time24Writing++;
       try { ok = await writeTimeToUkg(overlay, parsed); } catch (_) {}
@@ -2275,16 +2128,22 @@
       }
     }
 
-    if (msg.action === 'settingsUpdated') {
-      if (msg.manualNorm !== undefined) CFG.manualNorm = msg.manualNorm;
-      if (msg.vacationInDays !== undefined) CFG.vacationInDays = msg.vacationInDays;
-      if (msg.time24h !== undefined) { CFG.time24h = msg.time24h; setupTime24(); }
-      if (msg.hhmmFormat !== undefined) { CFG.hhmmFormat = msg.hhmmFormat; setupHHMM(); }
-      if (isVacationPage()) convertVacationBalancesToDays();
-      tryCalculateAndShow();
-    }
+    // Bez `return true` — odpowiedź jest synchroniczna.
+  });
 
-    return true; // async response
+  // Ustawienia (popup) i personData (baner w innej karcie) docierają przez magazyn, do
+  // wszystkich kart naraz. Bez tego karta ze starą kopią personData nadpisałaby przy
+  // najbliższym zapisie etat/korektę ustawione w innej karcie.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.personData) personData = changes.personData.newValue || {};
+    const cfgChanged = Object.keys(CFG).filter((k) => changes[k] && changes[k].newValue !== undefined);
+    if (!changes.personData && cfgChanged.length === 0) return;
+    cfgChanged.forEach((k) => { CFG[k] = changes[k].newValue; });
+    if (changes.time24h) setupTime24();
+    if (changes.hhmmFormat) setupHHMM();
+    if (isVacationPage()) convertVacationBalancesToDays();
+    tryCalculateAndShow();
   });
 
   // ─── Inicjalizacja ────────────────────────────────────────────────────────────
